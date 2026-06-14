@@ -137,40 +137,33 @@ async function uploadSingleImage(file, userId) {
   try {
     await enqueueHashJob(image.id);
   } catch (err) {
-  logger.error(
-    {
-      err,
-      imageId: image.id,
-    },
-    "Failed to enqueue hash job"
-  );
+    logger.error(
+      { err, imageId: image.id },
+      "Failed to enqueue hash job"
+    );
 
-  await prisma.processingJob.update({
-    where: {
-      imageId_jobType: {
-        imageId: image.id,
-        jobType: "HASH",
+    await prisma.processingJob.update({
+      where: {
+        imageId_jobType: {
+          imageId: image.id,
+          jobType: "HASH",
+        },
       },
-    },
-    data: {
-      status: "FAILED",
-      error: err.message,
-    },
-  });
+      data: {
+        status: "FAILED",
+        error: err.message,
+      },
+    });
 
-  await prisma.image.update({
-    where: {
-      id: image.id,
-    },
-    data: {
-      processingStatus: "FAILED",
-    },
-  });
+    await prisma.image.update({
+      where: { id: image.id },
+      data: { processingStatus: "FAILED" },
+    });
 
-  throw err;
-}
+    throw err;
+  }
 
- return serializeImage(image);
+  return serializeImage(image);
 }
 
 export async function getImages(userId, query) {
@@ -198,8 +191,8 @@ export async function getImages(userId, query) {
   const trimmed = hasNextPage ? images.slice(0, limit) : images;
 
   return {
-  images: trimmed.map(serializeImage),
-  pagination: {
+    images: trimmed.map(serializeImage),
+    pagination: {
       nextCursor: hasNextPage ? trimmed[trimmed.length - 1].id : null,
       hasNextPage,
       count: trimmed.length,
@@ -317,18 +310,13 @@ export async function bulkDeleteImages(imageIds, userId) {
   return { deleted: deletedIds.length };
 }
 
-/**
- *
- * @param {string} userId
- * @param {{ q: string, cursor?: string, limit?: number }} query
- */
 export async function searchImagesByOcr(userId, query) {
   const limit = Math.min(query.limit ?? env.DEFAULT_PAGE_SIZE, env.MAX_PAGE_SIZE);
   const searchQuery = query.q.trim();
   const tsQuery = searchQuery
     .split(/\s+/)
     .filter(Boolean)
-    .map((word) => `${word}:*`) 
+    .map((word) => `${word}:*`)
     .join(" & ");
 
   const rawResults = await prisma.$queryRaw`
@@ -355,6 +343,7 @@ export async function searchImagesByOcr(userId, query) {
       pagination: { nextCursor: null, hasNextPage: false, count: 0 },
     };
   }
+
   const imageIds = trimmed.map((r) => r.id);
   const images = await prisma.image.findMany({
     where: { id: { in: imageIds } },

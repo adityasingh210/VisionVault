@@ -58,7 +58,7 @@ export function parseSearchIntent(query) {
   let maxCategoryMatches = 0;
   for (const [slug, keywords] of Object.entries(CATEGORY_KEYWORDS)) {
     const matches = keywords.filter((kw) => lower.includes(kw)).length;
-    if (matches > maxCategoryMatches) {
+   if (matches >= 2 && matches > maxCategoryMatches) {
       maxCategoryMatches = matches;
       categorySlug = slug;
     }
@@ -123,13 +123,6 @@ async function runSemanticSearch(intent, userId) {
           gte: `${intent.yearFilter}-01-01T00:00:00Z`,
           lte: `${intent.yearFilter}-12-31T23:59:59Z`,
         },
-      });
-    }
-
-    if (intent.categorySlug) {
-      filter.must.push({
-        key: "category",
-        match: { value: intent.categorySlug },
       });
     }
 

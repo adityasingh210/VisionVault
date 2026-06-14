@@ -31,6 +31,9 @@ export async function loadClipModels() {
   return modelsLoading;
 }
 
+function toJpegUrl(url) {
+  return url.replace("/upload/", "/upload/f_jpg,q_auto/");
+}
 
 export async function generateImageEmbedding(imageUrl) {
   if (!visionModel || !processor) {
@@ -39,7 +42,7 @@ export async function generateImageEmbedding(imageUrl) {
 
   console.log("STEP 1 - Fetching Image for Embedding...");
   try {
-    const response = await fetch(imageUrl);
+    const response = await fetch(toJpegUrl(imageUrl));
     if (!response.ok) throw new Error(`Fetch failed: ${response.status}`);
 
     const arrayBuffer = await response.arrayBuffer();
@@ -54,9 +57,9 @@ export async function generateImageEmbedding(imageUrl) {
 
     for (let i = 0; i < numPixels; i++) {
       const idx = i * 4;
-      rgbData[i * 3]     = image.bitmap.data[idx];       // R
-      rgbData[i * 3 + 1] = image.bitmap.data[idx + 1];   // G
-      rgbData[i * 3 + 2] = image.bitmap.data[idx + 2];   // B
+      rgbData[i * 3]     = image.bitmap.data[idx];
+      rgbData[i * 3 + 1] = image.bitmap.data[idx + 1];
+      rgbData[i * 3 + 2] = image.bitmap.data[idx + 2];
     }
 
     console.log("STEP 3 - Constructing RawImage wrapper object...");

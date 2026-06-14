@@ -64,7 +64,15 @@ export async function classifyImage(imageUrl) {
     slug: s.slug,
     confidence: parseFloat((exps[i] / sumExps).toFixed(4)),
   }));
-  return probabilities
-    .sort((a, b) => b.confidence - a.confidence)
-    .slice(0, 5);
+  const filtered = probabilities
+  .filter(c => c.confidence > 0.20 && c.slug !== 'other')
+  .sort((a, b) => b.confidence - a.confidence)
+  .slice(0, 2);
+
+  if (filtered.length === 0) {
+  const other = probabilities.find(c => c.slug === 'other');
+  return [{ slug: 'other', confidence: other?.confidence ?? 1.0 }];
+}
+
+return filtered;
 }

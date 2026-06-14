@@ -43,7 +43,7 @@ export async function getImagesByCategory(slug, userId, query) {
   if (!category) throw new NotFoundError("Category");
 
   const limit = Math.min(query.limit ?? env.DEFAULT_PAGE_SIZE, env.MAX_PAGE_SIZE);
-  const minConfidence = query.minConfidence ?? 0.1;
+ const minConfidence = query.minConfidence ?? 0.25;
 
   const imageCategories = await prisma.imageCategory.findMany({
     where: {
