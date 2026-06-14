@@ -20,7 +20,7 @@ export const authApi = {
     await api.post('/auth/logout-all')
   },
 
-  refresh: async (refreshToken: string): Promise<{ tokens: AuthResponse['tokens'] }> => {
+  refresh: async (refreshToken: string): Promise<{ accessToken: string }> => {
     const { data } = await api.post('/auth/refresh', { refreshToken })
     return data
   },

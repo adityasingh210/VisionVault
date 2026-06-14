@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { getThumbnailUrl } from '@/lib/cloudinary'
 import {
   LayoutDashboard,
   Images,
@@ -143,7 +144,7 @@ export function CommandPalette() {
                     className="aspect-square rounded-lg overflow-hidden hover:opacity-80 transition-opacity"
                   >
                     <img
-                      src={img.thumbnailUrl || img.url}
+                      src={getThumbnailUrl(img.cloudinaryUrl || img.url)}
                       alt={img.filename}
                       className="w-full h-full object-cover"
                     />

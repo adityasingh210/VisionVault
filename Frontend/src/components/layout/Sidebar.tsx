@@ -19,6 +19,7 @@ import { useAuthStore } from '@/store/authStore'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
 import { authApi } from '@/api/auth'
+import { useQueryClient } from '@tanstack/react-query'
 
 const navItems = [
   { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
@@ -36,13 +37,16 @@ export function Sidebar() {
   const { sidebarOpen, toggleSidebar } = useUIStore()
   const { user, logout } = useAuthStore()
 
+
+  const queryClient = useQueryClient()
   const handleLogout = async () => {
-    try {
-      await authApi.logout()
-    } finally {
-      logout()
-    }
+  try {
+    await authApi.logout()
+  } finally {
+    queryClient.clear()
+    logout()
   }
+}
 
   const initials = user?.name
     ?.split(' ')

@@ -5,18 +5,18 @@ let embeddingQueue = null;
 
 export function getEmbeddingQueue() {
   if (!embeddingQueue) {
-    embeddingQueue = new Queue("image-processing", {
-      connection: getRedis(),
-      defaultJobOptions: {
-        attempts: 3,
-        backoff: {
-          type: "exponential",
-          delay: 5_000,
-        },
-        removeOnComplete: { count: 200 },
-        removeOnFail: { count: 500 },
-      },
-    });
+  embeddingQueue = new Queue("image-processing", {
+  connection: getRedis(),
+  defaultJobOptions: {
+    attempts: 3,
+    backoff: {
+      type: "exponential",
+      delay: 5_000,
+    },
+    removeOnComplete: { count: 200 },
+    removeOnFail: { count: 500 },
+  },
+});
 
     embeddingQueue.on("error", (err) => {
       logger.error("Embedding queue error", { error: err.message });
@@ -32,7 +32,7 @@ export async function enqueueEmbeddingJob(imageId) {
     "embedding",
     { imageId },
     {
-      jobId: `embedding:${imageId}`,
+      jobId: `embedding_${imageId}`,
     }
   );
 

@@ -72,20 +72,25 @@ export async function processOcrJob(job) {
     throw err;
   }
 
-  // Only save if there's actually text in the image
-  if (ocrResult.rawText.length > 0) {
+  if (ocrResult && ocrResult.rawText && ocrResult.rawText.length > 0) {
+    let safeConfidence = 0;
+    if (ocrResult.confidence) {
+      const confNum = Number(ocrResult.confidence);
+      safeConfidence = confNum > 1 ? confNum / 100 : confNum;
+    }
+
     await prisma.ocrRecord.upsert({
       where: { imageId },
       create: {
         imageId,
         rawText: ocrResult.rawText,
-        language: ocrResult.language,
-        confidence: ocrResult.confidence,
+        language: ocrResult.language || "en",
+        confidence: safeConfidence, 
       },
       update: {
         rawText: ocrResult.rawText,
-        language: ocrResult.language,
-        confidence: ocrResult.confidence,
+        language: ocrResult.language || "en",
+        confidence: safeConfidence,
       },
     });
   }

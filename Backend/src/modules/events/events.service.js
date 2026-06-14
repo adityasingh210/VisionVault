@@ -15,7 +15,7 @@ export async function listEvents(userId) {
       metadata: true,
       createdAt: true,
       coverImage: {
-        select: { id: true, thumbnailUrl: true, cloudinaryUrl: true },
+        select: { id: true,  cloudinaryUrl: true },
       },
       _count: { select: { eventImages: true } },
       eventImages: {
@@ -59,7 +59,7 @@ export async function getEventById(eventId, userId) {
       metadata: true,
       createdAt: true,
       coverImage: {
-        select: { id: true, thumbnailUrl: true, cloudinaryUrl: true },
+        select: { id: true, cloudinaryUrl: true },
       },
       _count: { select: { eventImages: true } },
       eventImages: {
@@ -106,7 +106,6 @@ export async function getEventImages(eventId, userId, query) {
       image: {
         select: {
           id: true,
-          thumbnailUrl: true,
           cloudinaryUrl: true,
           filename: true,
           takenAt: true,

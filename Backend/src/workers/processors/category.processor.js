@@ -104,10 +104,12 @@ export async function processCategoryJob(job) {
   );
   const topCategory = predictions[0]?.slug ?? "other";
   try {
-    await qdrantClient.setPayload(COLLECTIONS.IMAGE_EMBEDDINGS, {
-      payload: { category: topCategory },
-      points: [imageId],
-    });
+  await qdrantClient.setPayload(COLLECTIONS.IMAGE_EMBEDDINGS, {
+  payload: { category: topCategory },
+  filter: {
+    must: [{ key: "image_id", match: { value: imageId } }],
+  },
+});
   } catch (err) {
     logger.warn("Could not update Qdrant category payload", {
       imageId,

@@ -1,7 +1,7 @@
 import { Outlet } from 'react-router-dom'
-import { Sidebar } from '../Sidebar'
-import { Header } from '../Header'
-import { CommandPalette } from '../CommandPalette'
+import { Sidebar } from '../layout/Sidebar'
+import { Header } from '../layout/Header'
+import { CommandPalette } from '../layout/CommandPalette'
 import { useUIStore } from '@/store/uiStore'
 import { cn } from '@/lib/utils'
 

@@ -1,13 +1,17 @@
 import path from "path";
 import { fileURLToPath } from "url";
 import "@tensorflow/tfjs-backend-cpu";
+import * as tf from "@tensorflow/tfjs";
 import * as faceapi from "face-api.js";
 import logger from "../lib/logger.js";
+import { Jimp } from "jimp";
+
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const MODELS_DIR = path.resolve(__dirname, "../../.face-models");
 let modelsLoaded = false;
 let modelsLoading = null;
+
 export async function loadFaceModels() {
   if (modelsLoaded) return;
   if (modelsLoading) return modelsLoading;
@@ -30,48 +34,58 @@ export async function loadFaceModels() {
   return modelsLoading;
 }
 
-/**
- *
- * @param {string} imageUrl - Publicly accessible URL
- * @returns {Promise<Array<{
- *   bbox: { x: number, y: number, w: number, h: number },
- *   embedding: number[]
- * }>>}
- */
+async function fetchImageAsTensor(imageUrl) {
+  const response = await fetch(imageUrl);
+  if (!response.ok) throw new Error(`Fetch failed: ${response.status}`);
+
+  const arrayBuffer = await response.arrayBuffer();
+  const buffer = Buffer.from(arrayBuffer);
+
+  const image = await Jimp.read(buffer);
+  const { width, height } = image.bitmap;
+
+  const numPixels = width * height;
+  const rgbData = new Uint8Array(numPixels * 3);
+
+  for (let i = 0; i < numPixels; i++) {
+    const idx = i * 4;
+    rgbData[i * 3]     = image.bitmap.data[idx];
+    rgbData[i * 3 + 1] = image.bitmap.data[idx + 1];
+    rgbData[i * 3 + 2] = image.bitmap.data[idx + 2];
+  }
+
+  return tf.tensor3d(rgbData, [height, width, 3], "int32");
+}
+
 export async function detectFaces(imageUrl) {
   if (!modelsLoaded) {
     await loadFaceModels();
   }
 
+  const tensor = await fetchImageAsTensor(imageUrl);
 
-  const detections = await faceapi
-    .detectAllFaces(imageUrl, new faceapi.SsdMobilenetv1Options({ minConfidence: 0.5 }))
-    .withFaceLandmarks()
-    .withFaceDescriptors();
+  try {
+    const detections = await faceapi
+      .detectAllFaces(tensor, new faceapi.SsdMobilenetv1Options({ minConfidence: 0.5 }))
+      .withFaceLandmarks()
+      .withFaceDescriptors();
 
-  return detections.map((d) => ({
-    bbox: {
-      x: d.detection.box.x,
-      y: d.detection.box.y,
-      w: d.detection.box.width,
-      h: d.detection.box.height,
-    },
-    // descriptor is Float32Array(128) — convert to plain number[]
-    embedding: Array.from(d.descriptor),
-  }));
+    return detections.map((d) => ({
+      bbox: {
+        x: d.detection.box.x,
+        y: d.detection.box.y,
+        w: d.detection.box.width,
+        h: d.detection.box.height,
+      },
+      embedding: Array.from(d.descriptor),
+    }));
+  } finally {
+    tensor.dispose();
+  }
 }
 
-/**
- * Computes cosine similarity between two 128-dim face embeddings.
- *
- * @param {number[]} a
- * @param {number[]} b
- * @returns {number} similarity in [-1, 1]; higher = more similar
- */
 export function cosineSimilarity(a, b) {
-  let dot = 0;
-  let normA = 0;
-  let normB = 0;
+  let dot = 0, normA = 0, normB = 0;
   for (let i = 0; i < a.length; i++) {
     dot += a[i] * b[i];
     normA += a[i] * a[i];
@@ -81,5 +95,4 @@ export function cosineSimilarity(a, b) {
   return dot / (Math.sqrt(normA) * Math.sqrt(normB));
 }
 
-// Similarity threshold: faces with similarity >= this are considered the same person
 export const FACE_SIMILARITY_THRESHOLD = 0.82;

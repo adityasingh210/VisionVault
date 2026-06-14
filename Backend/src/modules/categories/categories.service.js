@@ -56,7 +56,6 @@ export async function getImagesByCategory(slug, userId, query) {
       image: {
         select: {
           id: true,
-          thumbnailUrl: true,
           cloudinaryUrl: true,
           filename: true,
           takenAt: true,

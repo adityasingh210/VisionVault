@@ -2,7 +2,7 @@ import { Router } from "express";
 import * as imagesController from "./images.controller.js";
 import { authenticate } from "../../middleware/authenticate.js";
 import { uploadSingle, uploadMultiple } from "../../middleware/upload.js";
-import { getUploadRateLimiter, getSearchRateLimiter } from "../../middleware/rateLimiter.js";
+import {uploadRateLimiter,searchRateLimiter,} from "../../middleware/rateLimiter.js";
 import { validate, validateQuery, validateParams } from "../../middleware/validate.js";
 import {
   getImagesSchema,
@@ -16,20 +16,20 @@ const router = Router();
 router.use(authenticate);
 router.post(
   "/upload",
-  getUploadRateLimiter,
+   uploadRateLimiter,
   uploadSingle("image"),
   imagesController.uploadSingle
 );
 
 router.post(
   "/upload/batch",
-  getUploadRateLimiter,
+  uploadRateLimiter,
   uploadMultiple("images", 20),
   imagesController.uploadBatch
 );
 router.get(
   "/search/ocr",
-  getSearchRateLimiter,
+  searchRateLimiter,
   validateQuery(ocrSearchSchema),
   imagesController.searchByOcr
 );

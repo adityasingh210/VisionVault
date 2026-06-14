@@ -137,11 +137,12 @@ async function runSemanticSearch(intent, userId) {
       vector: embedding,
       limit: SIGNAL_LIMIT,
       filter,
-      with_payload: false,
+      with_payload:true,
     });
-
+    console.log("Qdrant results count:", results.length);
+   console.log("First result:", results[0]);
     for (const r of results) {
-      scores.set(String(r.id), r.score);
+      scores.set(String(r.payload.image_id), r.score);
     }
   } catch (err) {
     logger.warn("Semantic search failed", { error: err.message });
@@ -154,26 +155,20 @@ async function runOcrSearch(intent, userId) {
   if (!intent.ocrTerms.length) return scores;
 
   try {
-    const tsQuery = intent.ocrTerms
-      .map((w) => `${w}:*`)
-      .join(" | "); 
-
-    const results = await prisma.$queryRaw`
-      SELECT
-        i.id,
-        ts_rank(ocr."textSearch", to_tsquery('english', ${tsQuery})) AS rank
-      FROM "OcrRecord" ocr
-      JOIN "Image" i ON i.id = ocr."imageId"
-      WHERE
-        i."userId" = ${userId}
-        AND i."deletedAt" IS NULL
-        AND ocr."textSearch" @@ to_tsquery('english', ${tsQuery})
-      ORDER BY rank DESC
-      LIMIT ${SIGNAL_LIMIT}
-    `;
+    const results = await prisma.ocrRecord.findMany({
+      where: {
+        image: { userId, deletedAt: null },
+        rawText: {
+          contains: intent.ocrTerms[0],
+          mode: "insensitive",
+        },
+      },
+      select: { imageId: true },
+      take: SIGNAL_LIMIT,
+    });
 
     for (const r of results) {
-      scores.set(r.id, Math.min(parseFloat(r.rank) / 0.5, 1.0));
+      scores.set(r.imageId, 0.8);
     }
   } catch (err) {
     logger.warn("OCR search failed", { error: err.message });
@@ -312,7 +307,6 @@ function mergeScores(signalScores, intent) {
 
 const IMAGE_SELECT = {
   id: true,
-  thumbnailUrl: true,
   cloudinaryUrl: true,
   filename: true,
   takenAt: true,

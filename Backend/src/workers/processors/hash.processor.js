@@ -1,4 +1,4 @@
-import sharp from "sharp";
+
 import crypto from "crypto";
 import prisma from "../../config/database.js";
 import { enqueueEmbeddingJob } from "../queues/embedding.queue.js";
@@ -7,6 +7,7 @@ import { enqueueFaceJob } from "../queues/face.queue.js";
 import { enqueueCategoryJob } from "../queues/category.queue.js";
 import logger from "../../lib/logger.js";
 import { env } from "../../config/env.js";
+import { Jimp } from "jimp";
 
 const AVERAGE_HASH_SIZE = 32;
 
@@ -28,27 +29,26 @@ function computeSha256(buffer) {
 }
 
 async function computeAverageHash(buffer) {
-  const { data } = await sharp(buffer)
-    .resize(AVERAGE_HASH_SIZE, AVERAGE_HASH_SIZE, { fit: "fill" })
-    .grayscale()
-    .raw()
-    .toBuffer({ resolveWithObject: true });
+  const image = await Jimp.fromBuffer(buffer);
+  image.resize({ w: 32, h: 32 });
+  image.greyscale();
 
-  const pixels = new Uint8Array(data);
-  const totalPixels = AVERAGE_HASH_SIZE * AVERAGE_HASH_SIZE;
+  const { data, width, height } = image.bitmap;
+  const totalPixels = width * height;
 
   let sum = 0;
-  for (let i = 0; i < totalPixels; i++) sum += pixels[i];
+  for (let i = 0; i < totalPixels; i++) {
+    sum += data[i * 4]; // R channel (greyscale mein R=G=B)
+  }
   const mean = sum / totalPixels;
 
   let hashBits = 0n;
   for (let i = 0; i < totalPixels; i++) {
-    hashBits = (hashBits << 1n) | (pixels[i] >= mean ? 1n : 0n);
+    hashBits = (hashBits << 1n) | (data[i * 4] >= mean ? 1n : 0n);
   }
 
   return hashBits.toString(16).padStart(256, "0");
 }
-
 function hammingDistance(hexA, hexB) {
   if (hexA.length !== hexB.length) {
     throw new Error(`Hash length mismatch: ${hexA.length} vs ${hexB.length}`);
@@ -210,32 +210,30 @@ export async function processHashJob(job) {
 
   await updateJobStatus(imageId, "COMPLETED");
 
-  // Create ProcessingJob stubs for downstream jobs before enqueueing
-  await prisma.processingJob.createMany({
-    data: [
-      { imageId, jobType: "OCR",       status: "QUEUED" },
-      { imageId, jobType: "EMBEDDING", status: "QUEUED" },
-      { imageId, jobType: "FACE",      status: "QUEUED" },
-      { imageId, jobType: "CATEGORY",  status: "QUEUED" },
-    ],
-    skipDuplicates: true,
-  });
+await prisma.processingJob.createMany({
+  data: [
+    { imageId, jobType: "OCR",       status: "QUEUED" },
+    { imageId, jobType: "EMBEDDING", status: "QUEUED" },
+    // { imageId, jobType: "FACE",   status: "QUEUED" },  // disabled on Windows
+    { imageId, jobType: "CATEGORY",  status: "QUEUED" },
+  ],
+  skipDuplicates: true,
+});
 
-  // Enqueue all downstream jobs in parallel
-  await Promise.allSettled([
-    enqueueOcrJob(imageId).catch((err) =>
-      logger.error("Failed to enqueue OCR job", { imageId, error: err.message })
-    ),
-    enqueueEmbeddingJob(imageId).catch((err) =>
-      logger.error("Failed to enqueue embedding job", { imageId, error: err.message })
-    ),
-    enqueueFaceJob(imageId).catch((err) =>
-      logger.error("Failed to enqueue face job", { imageId, error: err.message })
-    ),
-    enqueueCategoryJob(imageId).catch((err) =>
-      logger.error("Failed to enqueue category job", { imageId, error: err.message })
-    ),
-  ]);
+await Promise.allSettled([
+  enqueueOcrJob(imageId).catch((err) =>
+    logger.error("Failed to enqueue OCR job", { imageId, error: err.message })
+  ),
+  enqueueEmbeddingJob(imageId).catch((err) =>
+    logger.error("Failed to enqueue embedding job", { imageId, error: err.message })
+  ),
+  // enqueueFaceJob(imageId).catch((err) =>   // disabled on Windows
+  //   logger.error("Failed to enqueue face job", { imageId, error: err.message })
+  // ),
+  enqueueCategoryJob(imageId).catch((err) =>
+    logger.error("Failed to enqueue category job", { imageId, error: err.message })
+  ),
+]);
 
   logger.info("Hash job completed", {
     imageId,

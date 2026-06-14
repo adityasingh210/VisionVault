@@ -10,7 +10,7 @@ interface AuthState {
   setUser: (user: User | null) => void
   setAuthenticated: (value: boolean) => void
   setLoading: (value: boolean) => void
-  login: (user: User, accessToken: string, refreshToken: string) => void
+ login: (user: User, accessToken: string) => void
   logout: () => void
 }
 
@@ -25,22 +25,43 @@ export const useAuthStore = create<AuthState>()(
       setAuthenticated: (value) => set({ isAuthenticated: value }),
       setLoading: (value) => set({ isLoading: value }),
 
-      login: (user, accessToken, refreshToken) => {
-        tokenStorage.setTokens(accessToken, refreshToken)
-        set({ user, isAuthenticated: true, isLoading: false })
-      },
+login: (user, accessToken) => {
+  if (!accessToken) {
+    console.error("Access token missing during login", {
+      user,
+      accessToken,
+    })
+
+    return
+  }
+
+  tokenStorage.setAccess(accessToken)
+
+  set({
+    user,
+    isAuthenticated: true,
+    isLoading: false,
+  })
+},
 
       logout: () => {
         tokenStorage.clear()
         set({ user: null, isAuthenticated: false, isLoading: false })
       },
     }),
-    {
-      name: 'photomind-auth',
-      partialize: (state) => ({
-        user: state.user,
-        isAuthenticated: state.isAuthenticated,
-      }),
-    }
+  {
+  name: 'photomind-auth',
+
+partialize: (state) => ({
+  user: state.user,
+}),
+
+ onRehydrateStorage: () => (state) => {
+  const token = tokenStorage.getAccess()
+
+  state?.setAuthenticated(!!token)
+  state?.setLoading(false)
+},
+}
   )
 )

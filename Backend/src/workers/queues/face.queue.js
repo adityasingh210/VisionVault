@@ -33,7 +33,7 @@ export async function enqueueFaceJob(imageId) {
   const job = await queue.add(
     "face",
     { imageId },
-    { jobId: `face:${imageId}` }
+    { jobId: `face_${imageId}` }
   );
 
   logger.debug("Face job enqueued", { imageId, jobId: job.id });

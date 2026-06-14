@@ -23,7 +23,6 @@ const imageSelectFields = {
   userId: true,
   filename: true,
   cloudinaryUrl: true,
-  thumbnailUrl: true,
   width: true,
   height: true,
   fileSize: true,
@@ -36,6 +35,16 @@ const imageSelectFields = {
   createdAt: true,
   updatedAt: true,
 };
+
+function serializeImage(image) {
+  return {
+    ...image,
+    fileSize:
+      image.fileSize != null
+        ? image.fileSize.toString()
+        : null,
+  };
+}
 
 async function validateImageBuffer(buffer, originalName) {
   if (buffer.length > MAX_FILE_SIZE_BYTES) {
@@ -101,9 +110,6 @@ async function uploadSingleImage(file, userId) {
   const mimeType = await validateImageBuffer(buffer, originalname);
   const cloudinaryResult = await uploadToCloudinary(buffer, originalname, userId);
 
-  const thumbnailUrl =
-    cloudinaryResult.eager?.[0]?.secure_url ?? cloudinaryResult.secure_url;
-
   const image = await prisma.$transaction(async (tx) => {
     const created = await tx.image.create({
       data: {
@@ -111,7 +117,6 @@ async function uploadSingleImage(file, userId) {
         filename: originalname,
         cloudinaryId: cloudinaryResult.public_id,
         cloudinaryUrl: cloudinaryResult.secure_url,
-        thumbnailUrl,
         width: cloudinaryResult.width,
         height: cloudinaryResult.height,
         fileSize: BigInt(buffer.length),
@@ -132,13 +137,40 @@ async function uploadSingleImage(file, userId) {
   try {
     await enqueueHashJob(image.id);
   } catch (err) {
-    logger.error("Failed to enqueue hash job", {
+  logger.error(
+    {
+      err,
       imageId: image.id,
-      error: err.message,
-    });
-  }
+    },
+    "Failed to enqueue hash job"
+  );
 
-  return image;
+  await prisma.processingJob.update({
+    where: {
+      imageId_jobType: {
+        imageId: image.id,
+        jobType: "HASH",
+      },
+    },
+    data: {
+      status: "FAILED",
+      error: err.message,
+    },
+  });
+
+  await prisma.image.update({
+    where: {
+      id: image.id,
+    },
+    data: {
+      processingStatus: "FAILED",
+    },
+  });
+
+  throw err;
+}
+
+ return serializeImage(image);
 }
 
 export async function getImages(userId, query) {
@@ -166,8 +198,8 @@ export async function getImages(userId, query) {
   const trimmed = hasNextPage ? images.slice(0, limit) : images;
 
   return {
-    images: trimmed,
-    pagination: {
+  images: trimmed.map(serializeImage),
+  pagination: {
       nextCursor: hasNextPage ? trimmed[trimmed.length - 1].id : null,
       hasNextPage,
       count: trimmed.length,
@@ -205,7 +237,7 @@ export async function getImageById(imageId, userId) {
   if (!image) throw new NotFoundError("Image");
   if (image.userId !== userId) throw new ForbiddenError();
 
-  return image;
+  return serializeImage(image);
 }
 
 export async function getImageProcessingStatus(imageId, userId) {

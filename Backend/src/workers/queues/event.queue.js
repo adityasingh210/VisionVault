@@ -35,7 +35,7 @@ export async function enqueueEventJob(userId, eventJobId) {
     "event",
     { userId, eventJobId },
     {
-      jobId: `event:${userId}:${eventJobId}`,
+      jobId: `event_${userId}:${eventJobId}`,
     }
   );
 

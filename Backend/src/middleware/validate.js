@@ -10,7 +10,7 @@ export function validate(schema) {
     const result = schema.safeParse(req.body);
 
     if (!result.success) {
-      const issues = result.error.errors.map((e) => ({
+      const issues = result.error.issues.map((e) => ({
         field: e.path.join("."),
         message: e.message,
       }));
@@ -31,7 +31,7 @@ export function validateQuery(schema) {
     const result = schema.safeParse(req.query);
 
     if (!result.success) {
-      const issues = result.error.errors.map((e) => ({
+      const issues = result.error.issues.map((e) => ({
         field: e.path.join("."),
         message: e.message,
       }));
@@ -52,7 +52,7 @@ export function validateParams(schema) {
     const result = schema.safeParse(req.params);
 
     if (!result.success) {
-      const issues = result.error.errors.map((e) => ({
+      const issues = result.error.issues.map((e) => ({
         field: e.path.join("."),
         message: e.message,
       }));

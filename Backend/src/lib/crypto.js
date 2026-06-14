@@ -1,5 +1,5 @@
 import crypto from "crypto";
-import sharp from "sharp";
+import { Jimp } from "jimp";
 
 /**
  * @param {Buffer} buffer
@@ -14,22 +14,25 @@ export function sha256(buffer) {
  * @returns {Promise<string>} hex pHash
  */
 export async function computeAverageHash(buffer) {
-  const { data } = await sharp(buffer)
-    .resize(32, 32, { fit: "fill" })
-    .greyscale()
-    .raw()
-    .toBuffer({ resolveWithObject: true });
+  const image = await Jimp.fromBuffer(buffer);
+  image.resize({ w: 32, h: 32 });
+  image.greyscale();
 
-  const pixels = new Uint8Array(data);
-  const mean = pixels.reduce((sum, v) => sum + v, 0) / pixels.length;
-  const bits = new Uint8Array(128);
-  for (let i = 0; i < 1024; i++) {
-    if (pixels[i] >= mean) {
-      bits[Math.floor(i / 8)] |= 1 << (7 - (i % 8));
-    }
+  const { data, width, height } = image.bitmap;
+  const totalPixels = width * height;
+
+  let sum = 0;
+  for (let i = 0; i < totalPixels; i++) {
+    sum += data[i * 4];
+  }
+  const mean = sum / totalPixels;
+
+  let hashBits = 0n;
+  for (let i = 0; i < totalPixels; i++) {
+    hashBits = (hashBits << 1n) | (data[i * 4] >= mean ? 1n : 0n);
   }
 
-  return Buffer.from(bits).toString("hex");
+  return hashBits.toString(16).padStart(256, "0");
 }
 
 /**
@@ -41,9 +44,7 @@ export function hammingDistance(hexA, hexB) {
   if (hexA.length !== hexB.length) {
     throw new Error("pHash strings must be the same length");
   }
-
   let distance = 0;
-
   for (let i = 0; i < hexA.length; i += 2) {
     const byteA = parseInt(hexA.slice(i, i + 2), 16);
     const byteB = parseInt(hexB.slice(i, i + 2), 16);
@@ -53,13 +54,12 @@ export function hammingDistance(hexA, hexB) {
       distance++;
     }
   }
-
   return distance;
 }
-
 /**
  * @returns {string}
  */
+
 export function generateTokenId() {
   return crypto.randomUUID();
 }

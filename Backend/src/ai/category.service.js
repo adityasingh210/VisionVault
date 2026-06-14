@@ -31,11 +31,11 @@ export async function loadCategoryEmbeddings() {
     CATEGORIES.map((c) => generateTextEmbedding(c.label))
   );
 
-  categoryEmbeddings = CATEGORIES.map((c, i) => ({
-    slug: c.label,        
-    displaySlug: c.slug,  
+categoryEmbeddings = CATEGORIES.map((c, i) => ({
+    slug: c.slug,
+    displaySlug: c.slug,
     embedding: embeddings[i],
-  }));
+}));
 
   logger.info("Category embeddings ready");
 }

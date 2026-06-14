@@ -14,7 +14,7 @@ export async function listFaceClusters(userId) {
         orderBy: { createdAt: "asc" },
         select: {
           image: {
-            select: { id: true, thumbnailUrl: true },
+            select: { id: true },
           },
         },
       },
@@ -50,7 +50,6 @@ export async function getFaceClusterById(clusterId, userId) {
           image: {
             select: {
               id: true,
-              thumbnailUrl: true,
               cloudinaryUrl: true,
               takenAt: true,
             },

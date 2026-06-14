@@ -35,7 +35,7 @@ export async function enqueueCategoryJob(imageId) {
   const job = await queue.add(
     "category",
     { imageId },
-    { jobId: `category:${imageId}` }
+    { jobId: `category_${imageId}`}
   );
 
   logger.debug("Category job enqueued", { imageId, jobId: job.id });

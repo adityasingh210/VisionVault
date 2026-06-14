@@ -33,10 +33,13 @@ export async function register(req, res) {
 
   setRefreshCookie(res, refreshToken);
 
-  res.status(201).json({
-    user,
+res.status(201).json({
+  user,
+  tokens: {
     accessToken,
-  });
+    refreshToken,
+  },
+});
 }
 
 
@@ -45,10 +48,13 @@ export async function login(req, res) {
 
   setRefreshCookie(res, refreshToken);
 
-  res.json({
-    user,
+res.json({
+  user,
+  tokens: {
     accessToken,
-  });
+    refreshToken,
+  },
+});
 }
 
 
@@ -63,7 +69,12 @@ export async function refresh(req, res) {
 
   setRefreshCookie(res, refreshToken);
 
-  res.json({ accessToken });
+ res.json({
+  tokens: {
+    accessToken,
+    refreshToken,
+  },
+});
 }
 
 export async function logout(req, res) {

@@ -15,6 +15,8 @@ import {
   memoriesApi,
 } from '@/api/services'
 import type { Image } from '@/types'
+import { tokenStorage } from '@/api/client'
+import { useAuthStore } from '@/store/authStore'
 
 export const queryKeys = {
   auth: {
@@ -51,19 +53,22 @@ export const queryKeys = {
 }
 
 export function useMe(options?: UseQueryOptions<Awaited<ReturnType<typeof authApi.me>>>) {
-  return useQuery({
-    queryKey: queryKeys.auth.me,
-    queryFn: authApi.me,
-    staleTime: 5 * 60 * 1000,
-    ...options,
-  })
+return useQuery({
+  queryKey: queryKeys.auth.me,
+  queryFn: authApi.me,
+  staleTime: 5 * 60 * 1000,
+  enabled: !!tokenStorage.getAccess(),
+  retry: false,
+  ...options,
+})
 }
 
 export function useLogin() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: authApi.login,
-    onSuccess: () => {
+    onSuccess: (data) => {
+      tokenStorage.setAccess(data.tokens.accessToken)  // ← yeh add karo
       qc.invalidateQueries({ queryKey: queryKeys.auth.me })
     },
   })
@@ -73,9 +78,10 @@ export function useLogout() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: authApi.logout,
-    onSuccess: () => {
-      qc.clear()
-    },
+   onSuccess: () => {
+  useAuthStore.getState().logout()
+  qc.clear()
+}
   })
 }
 
@@ -87,14 +93,24 @@ export function useImages(params?: GetImagesParams) {
   })
 }
 
-export function useInfiniteImages(params?: Omit<GetImagesParams, 'page'>) {
+export function useInfiniteImages(params?: GetImagesParams) {
   return useInfiniteQuery({
     queryKey: queryKeys.images.infinite(params),
-    queryFn: ({ pageParam = 1 }) =>
-      imagesApi.getAll({ ...params, page: pageParam as number, pageSize: 30 }),
+
+   queryFn: ({ pageParam }: { pageParam: string | undefined }) =>
+  imagesApi.getAll({
+    ...params,
+    cursor: pageParam,
+    limit: 30,
+  }),
+
     getNextPageParam: (lastPage) =>
-      lastPage.hasMore ? lastPage.page + 1 : undefined,
-    initialPageParam: 1,
+      lastPage.pagination.hasNextPage
+        ? lastPage.pagination.nextCursor
+        : undefined,
+
+    initialPageParam: undefined,
+
     staleTime: 60_000,
   })
 }
@@ -122,7 +138,8 @@ export function useSearch(q: string) {
     queryKey: queryKeys.search.results(q),
     queryFn: () => searchApi.search(q),
     enabled: q.length > 1,
-    staleTime: 30_000,
+    staleTime: 0,        
+    gcTime: 0,
   })
 }
 

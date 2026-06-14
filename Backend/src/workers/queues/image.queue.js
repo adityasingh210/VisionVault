@@ -33,7 +33,7 @@ export async function enqueueHashJob(imageId) {
     "hash",
     { imageId },
     {
-      jobId: `hash:${imageId}`,
+      jobId: `hash_${imageId}`,
     }
   );
 

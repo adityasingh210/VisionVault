@@ -4,6 +4,7 @@ const BASE_URL = import.meta.env.VITE_API_URL || '/api'
 
 export const api = axios.create({
   baseURL: BASE_URL,
+  withCredentials: true,
   headers: {
     'Content-Type': 'application/json',
   },
@@ -11,20 +12,18 @@ export const api = axios.create({
 })
 
 const TOKEN_KEY = 'photomind_access_token'
-const REFRESH_KEY = 'photomind_refresh_token'
 
 export const tokenStorage = {
   getAccess: () => localStorage.getItem(TOKEN_KEY),
-  getRefresh: () => localStorage.getItem(REFRESH_KEY),
-  setTokens: (access: string, refresh: string) => {
+
+  setAccess: (access: string) => {
     localStorage.setItem(TOKEN_KEY, access)
-    localStorage.setItem(REFRESH_KEY, refresh)
   },
+
   clear: () => {
     localStorage.removeItem(TOKEN_KEY)
-    localStorage.removeItem(REFRESH_KEY)
   },
-}─
+}
 
 api.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
@@ -36,8 +35,6 @@ api.interceptors.request.use(
   },
   (error) => Promise.reject(error)
 )
-
-// ─── Response Interceptor (token refresh) ────────────────────────────────────
 
 let isRefreshing = false
 let failedQueue: Array<{
@@ -78,20 +75,18 @@ api.interceptors.response.use(
       originalRequest._retry = true
       isRefreshing = true
 
-      const refreshToken = tokenStorage.getRefresh()
-
-      if (!refreshToken) {
-        tokenStorage.clear()
-        window.location.href = '/login'
-        return Promise.reject(error)
-      }
-
       try {
-        const response = await axios.post(`${BASE_URL}/auth/refresh`, {
-          refreshToken,
-        })
-        const { accessToken, refreshToken: newRefresh } = response.data.tokens
-        tokenStorage.setTokens(accessToken, newRefresh)
+       const response = await axios.post(
+  `${BASE_URL}/auth/refresh`,
+  {},
+  {
+    withCredentials: true,
+  }
+)
+
+const { accessToken } = response.data.tokens
+
+tokenStorage.setAccess(accessToken)
         processQueue(null, accessToken)
         if (originalRequest.headers) {
           originalRequest.headers.Authorization = `Bearer ${accessToken}`
@@ -110,13 +105,25 @@ api.interceptors.response.use(
     return Promise.reject(error)
   }
 )
-
-// ─── API Error Helper ─────────────────────────────────────────────────────────
-
 export function getApiErrorMessage(error: unknown): string {
   if (axios.isAxiosError(error)) {
-    return error.response?.data?.message || error.message || 'Something went wrong'
+    const data = error.response?.data
+
+    if (data?.error?.issues?.length) {
+      return data.error.issues
+        .map((issue: { message: string }) => issue.message)
+        .join(", ")
+    }
+
+    return (
+      data?.error?.message ||
+      data?.message ||
+      error.message ||
+      "Something went wrong"
+    )
   }
+
   if (error instanceof Error) return error.message
-  return 'An unexpected error occurred'
+
+  return "An unexpected error occurred"
 }

@@ -36,7 +36,8 @@ async function processJob(job) {
     case "ocr":
       return processOcrJob(job);
     case "face":
-      return processFaceJob(job);
+      logger.warn("Face job skipped — disabled on Windows", { jobId: job.id });
+      return;
     case "category":
       return processCategoryJob(job);
     case "event":
@@ -47,65 +48,83 @@ async function processJob(job) {
 }
 
 async function start() {
-  await connectDatabase();
-  await connectRedis();
-  await seedCategories();
+  try {
+    await connectDatabase();
+    await connectRedis();
+    await seedCategories();
 
-  logger.info("Preloading AI models...");
-  await Promise.all([
-    loadClipModels().then(() => logger.info("CLIP models ready")),
-    loadCategoryEmbeddings().then(() => logger.info("Category embeddings ready")),
-    loadFaceModels().then(() => logger.info("Face models ready")),
-  ]);
+    logger.info("Preloading AI models...");
+    await Promise.all([
+      loadClipModels().then(() => logger.info("CLIP models ready")),
+      loadCategoryEmbeddings().then(() => logger.info("Category embeddings ready")),
+      // loadFaceModels().then(() => logger.info("Face models ready")),
+    ]);
 
-  worker = new Worker("image-processing", processJob, {
-    connection: getRedis(),
-    concurrency: 3,
-    limiter: {
-      max: 10,
-      duration: 1000,
-    },
-  });
-
-  worker.on("active", (job) => {
-    logger.debug("Job started", {
-      jobId: job.id,
-      jobName: job.name,
-      imageId: job.data.imageId,
+    worker = new Worker("image-processing", processJob, {
+      connection: getRedis(),
+      concurrency: 1,
+      lockDuration: 300000,
+      stalledInterval: 60000,
+      maxStalledCount: 1,
+      limiter: {
+        max: 10,
+        duration: 1000,
+      },
     });
-  });
 
-  worker.on("completed", (job) => {
-    logger.info("Job completed", {
-      jobId: job.id,
-      jobName: job.name,
-      imageId: job.data.imageId,
+    worker.on("active", (job) => {
+      logger.debug("Job started", {
+        jobId: job.id,
+        jobName: job.name,
+        imageId: job.data.imageId,
+      });
     });
-  });
 
-  worker.on("failed", (job, err) => {
-    logger.error("Job failed", {
-      jobId: job?.id,
-      jobName: job?.name,
-      data: job?.data,
-      attempt: job?.attemptsMade,
-      error: err.message,
+    worker.on("completed", (job) => {
+      logger.info("Job completed", {
+        jobId: job.id,
+        jobName: job.name,
+        imageId: job.data.imageId,
+      });
     });
-  });
 
-  worker.on("error", (err) => {
-    logger.error("Worker error", { error: err.message });
-  });
+    worker.on("failed", (job, err) => {
+      console.error("===== JOB FAILED =====");
+      console.error("Job:", job?.name);
+      console.error("ImageId:", job?.data?.imageId);
+      console.error(err);
 
-  worker.on("stalled", (jobId) => {
-    logger.warn("Job stalled", { jobId });
-  });
+      logger.error(
+        {
+          jobName: job?.name,
+          imageId: job?.data?.imageId,
+          error: err?.stack || err?.message,
+        },
+        "Job failed"
+      );
+    });
 
-  logger.info("Worker started", {
-    queue: "image-processing",
-    concurrency: 3,
-    env: env.NODE_ENV,
-  });
+    worker.on("error", (err) => {
+      console.error("===== WORKER ERROR FULL =====", err);
+    });
+
+    getRedis().on("error", (err) => {
+      console.error("===== REDIS ERROR =====", err);
+    });
+
+    worker.on("stalled", (jobId) => {
+      logger.warn("Job stalled detected and handled", { jobId });
+    });
+
+    logger.info("Worker started", {
+      queue: "image-processing",
+      concurrency: 1,
+      env: env.NODE_ENV,
+    });
+  } catch (err) {
+    console.error("===== START FAILED =====", err);
+    process.exit(1);
+  }
 }
 
 async function shutdown(signal) {
@@ -146,11 +165,16 @@ process.on("uncaughtException", (err) => {
 });
 
 process.on("unhandledRejection", (reason) => {
-  logger.error("Worker unhandled rejection", { reason: String(reason) });
-  process.exit(1);
+  console.error("===== UNHANDLED REJECTION =====");
+  console.error(reason);
+
+  logger.error(
+    { reason },
+    "Worker unhandled rejection"
+  );
 });
 
 start().catch((err) => {
-    console.error(err);
+  console.error(err);
   process.exit(1);
 });

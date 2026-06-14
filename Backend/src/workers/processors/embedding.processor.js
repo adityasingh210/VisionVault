@@ -2,7 +2,7 @@ import prisma from "../../config/database.js";
 import qdrantClient, { COLLECTIONS } from "../../config/qdrant.js";
 import { generateImageEmbedding } from "../../ai/clip.service.js";
 import logger from "../../lib/logger.js";
-import { JobType } from "@prisma/client";
+
 async function updateJobStatus(imageId, jobType, status, error = null) {
   await prisma.processingJob.updateMany({
     where: { imageId, jobType },
@@ -18,7 +18,7 @@ async function allJobsComplete(imageId) {
   const pendingJobs = await prisma.processingJob.count({
     where: {
       imageId,
-      jobType: {not: JobType.CLUSTER},
+      jobType: { not: "CLUSTER" },
       status: { notIn: ["COMPLETED", "FAILED"] },
     },
   });
@@ -103,14 +103,17 @@ if (!image) {
   : null;
 
   try {
+    function uuidToInt(uuid) {
+  return parseInt(uuid.replace(/-/g, '').slice(0, 15), 16);
+}
     await qdrantClient.upsert(COLLECTIONS.IMAGE_EMBEDDINGS, {
       wait: true,
       points: [
         {
-          id: imageId, 
+          id: uuidToInt(imageId), 
           vector: embedding,
           payload: {
-            image_id: imageId,
+            image_id: imageId, 
             user_id: image.userId,
             category: topCategory,
             taken_at: takenAtValue,

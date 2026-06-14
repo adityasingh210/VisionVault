@@ -19,6 +19,7 @@ import memoriesRoutes from "./src/modules/memories/memories.routes.js";
 const app = express();
 
 app.use(helmet());
+app.set('etag', false)
 
 app.use(
   cors({

@@ -35,7 +35,7 @@ export async function enqueueOcrJob(imageId) {
   const job = await queue.add(
     "ocr",
     { imageId },
-    { jobId: `ocr:${imageId}` }
+    { jobId: `ocr_${imageId}` }
   );
 
   logger.debug("OCR job enqueued", { imageId, jobId: job.id });
