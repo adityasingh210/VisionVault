@@ -112,7 +112,7 @@ Built to scale to **100,000+ images** with asynchronous processing queues, vecto
 ### 1. Clone the Repository
 
 ```bash
-git clone https://github.com/yourusername/visionvault.git
+git clone https://github.com/adityasingh210/VisionVault.git
 cd visionvault
 ```
 
