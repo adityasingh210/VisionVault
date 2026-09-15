@@ -27,19 +27,19 @@ export function bucketByTime(images) {
         images: [img],
         startAt: img.takenAt,
         endAt: img.takenAt,
-        lat: img.locationLat ? parseFloat(img.locationLat) : null,
-        lng: img.locationLng ? parseFloat(img.locationLng) : null,
+        lat: img.locationLat != null ? parseFloat(img.locationLat) : null,
+        lng: img.locationLng != null ? parseFloat(img.locationLng) : null,
       };
       buckets.push(current);
     } else {
       current.images.push(img);
       current.endAt = img.takenAt;
-      if (img.locationLat && img.locationLng) {
-        const n = current.images.filter((i) => i.locationLat).length;
-        current.lat = current.lat
+      if (img.locationLat != null && img.locationLng != null) {
+        const n = current.images.filter((i) => i.locationLat != null).length;
+        current.lat = current.lat != null
           ? (current.lat * (n - 1) + parseFloat(img.locationLat)) / n
           : parseFloat(img.locationLat);
-        current.lng = current.lng
+        current.lng = current.lng != null
           ? (current.lng * (n - 1) + parseFloat(img.locationLng)) / n
           : parseFloat(img.locationLng);
       }
@@ -84,7 +84,7 @@ export function mergeByLocation(buckets) {
         const a = merged[i];
         const b = merged[j];
 
-        if (!a.lat || !b.lat) continue;
+        if (a.lat == null || b.lat == null) continue;
 
         const dist = haversineKm(a.lat, a.lng, b.lat, b.lng);
         if (dist > LOCATION_MERGE_KM) continue;

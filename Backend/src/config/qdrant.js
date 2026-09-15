@@ -31,6 +31,7 @@ const payloadIndexes = {
     { field: "user_id", schema: "keyword" },
     { field: "category", schema: "keyword" },
     { field: "taken_at", schema: "datetime" },
+    { field: "image_id", schema: "keyword" },
   ],
   [COLLECTIONS.FACE_EMBEDDINGS]: [
     { field: "user_id", schema: "keyword" },
@@ -60,10 +61,24 @@ async function ensurePayloadIndexes(collectionName, indexes) {
         field_schema: schema,
       });
     } catch (error) {
-      logger.debug("Payload index already exists", {
-        collection: collectionName,
-        field,
-      });
+      const message = String(error?.message ?? error);
+      if (/already exists/i.test(message)) {
+        logger.debug("Payload index already exists", {
+          collection: collectionName,
+          field,
+        });
+      } else {
+        // A real failure (Qdrant unreachable, bad auth, invalid schema, etc.)
+        // was previously mislabeled as "already exists" and logged at debug
+        // level, hiding it. This field may now be unindexed — filters on it
+        // (e.g. category.processor.js's setPayload-by-image_id) will still
+        // work but fall back to an unindexed scan.
+        logger.error("Failed to create Qdrant payload index", {
+          collection: collectionName,
+          field,
+          error: message,
+        });
+      }
     }
   }
 }

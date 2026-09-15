@@ -85,7 +85,7 @@ export function Sidebar() {
             </div>
             {sidebarOpen && (
               <span className="font-semibold text-foreground tracking-tight truncate">
-                PhotoMind
+                VisionVault
               </span>
             )}
           </Link>

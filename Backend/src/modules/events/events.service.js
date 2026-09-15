@@ -15,11 +15,12 @@ export async function listEvents(userId) {
       metadata: true,
       createdAt: true,
       coverImage: {
-        select: { id: true,  cloudinaryUrl: true },
+        select: { id: true, cloudinaryUrl: true, deletedAt: true },
       },
-      _count: { select: { eventImages: true } },
+      _count: { select: { eventImages: { where: { image: { deletedAt: null } } } } },
       eventImages: {
         take: 20,
+        where: { image: { deletedAt: null } },
         select: {
           image: {
             select: {
@@ -59,11 +60,12 @@ export async function getEventById(eventId, userId) {
       metadata: true,
       createdAt: true,
       coverImage: {
-        select: { id: true, cloudinaryUrl: true },
+        select: { id: true, cloudinaryUrl: true, deletedAt: true },
       },
-      _count: { select: { eventImages: true } },
+      _count: { select: { eventImages: { where: { image: { deletedAt: null } } } } },
       eventImages: {
         take: 50,
+        where: { image: { deletedAt: null } },
         select: {
           image: {
             select: {
@@ -101,8 +103,9 @@ export async function getEventImages(eventId, userId, query) {
   const limit = Math.min(query.limit ?? env.DEFAULT_PAGE_SIZE, env.MAX_PAGE_SIZE);
 
   const eventImages = await prisma.eventImage.findMany({
-    where: { eventId },
+    where: { eventId, image: { deletedAt: null } },
     select: {
+      imageId: true,
       image: {
         select: {
           id: true,
@@ -120,7 +123,7 @@ export async function getEventImages(eventId, userId, query) {
     ...(query.cursor
       ? { cursor: { eventId_imageId: { eventId, imageId: query.cursor } } }
       : {}),
-    orderBy: { image: { takenAt: "asc" } },
+    orderBy: [{ image: { takenAt: "asc" } }, { imageId: "asc" }],
   });
 
   const hasNextPage = eventImages.length > limit;
@@ -183,7 +186,9 @@ function formatEvent(event) {
     endAt: event.endAt,
     locationLat: event.locationLat,
     locationLng: event.locationLng,
-    coverImage: event.coverImage ?? null,
+    coverImage: event.coverImage && !event.coverImage.deletedAt
+      ? { id: event.coverImage.id, cloudinaryUrl: event.coverImage.cloudinaryUrl }
+      : null,
     topCategories,
     topPeople: faceClusterIds.size,
     createdAt: event.createdAt,

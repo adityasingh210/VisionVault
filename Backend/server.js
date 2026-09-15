@@ -47,6 +47,7 @@ async function shutdown(signal) {
 
 process.on("SIGTERM", () => shutdown("SIGTERM"));
 process.on("SIGINT", () => shutdown("SIGINT"));
+process.on("SIGUSR2", () => shutdown("SIGUSR2")); 
 
 process.on("uncaughtException", (err) => {
   logger.error("Uncaught exception", { error: err.message, stack: err.stack });
@@ -60,5 +61,7 @@ process.on("unhandledRejection", (reason) => {
 
 start().catch((err) => {
   logger.error("Failed to start server", { error: err.message, stack: err.stack });
+  console.error("ACTUAL STARTUP ERROR:");
+  console.error(err);
   process.exit(1);
 });

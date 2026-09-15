@@ -14,6 +14,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { useUploadBatch } from '@/hooks/useApi'
 import { cn } from '@/lib/utils'
+import { getApiErrorMessage } from '@/api/client'
 
 type FileStatus = 'pending' | 'uploading' | 'done' | 'error'
 
@@ -163,7 +164,7 @@ export default function UploadPage() {
           batchIds.includes(e.id) ? { ...e, status: 'done', progress: 100 } : e
         ))
       } catch (err) {
-        const msg = err instanceof Error ? err.message : 'Upload failed'
+        const msg = getApiErrorMessage(err)
         setFiles(prev => prev.map(e =>
           batchIds.includes(e.id) ? { ...e, status: 'error', error: msg } : e
         ))

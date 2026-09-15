@@ -7,8 +7,10 @@ const envSchema = z.object({
 
  
   DATABASE_URL: z.url(),
-
-  REDIS_URL: z.url(),
+  REDIS_HOST: z.string().min(1),
+  REDIS_PORT: z.coerce.number().int().positive(),
+  REDIS_USERNAME: z.string().min(1),
+  REDIS_PASSWORD: z.string().min(1),
 
   JWT_SECRET: z.string().min(32, "JWT_SECRET must be at least 32 characters"),
   JWT_REFRESH_SECRET: z
@@ -29,10 +31,16 @@ const envSchema = z.object({
   QDRANT_URL: z.url(),
   QDRANT_API_KEY: z.string().optional(),
 
-  GOOGLE_CLIENT_ID: z.string().min(1),
-  GOOGLE_CLIENT_SECRET: z.string().min(1),
-  GOOGLE_CALLBACK_URL: z.url(),
-  GOOGLE_PHOTOS_CALLBACK_URL: z.url(),
+  // NOTE: Google OAuth / Google Photos import is not implemented anywhere in
+  // this app (no route/controller/service reads these) — the GoogleAccount
+  // Prisma model and ImageSource.GOOGLE_PHOTOS enum value exist as unused
+  // schema for a feature that hasn't been built yet. These are optional so
+  // the app can actually boot without inventing 4 dummy values; make them
+  // required again once Google Sign-In/Photos import is actually implemented.
+  GOOGLE_CLIENT_ID: z.string().min(1).optional(),
+  GOOGLE_CLIENT_SECRET: z.string().min(1).optional(),
+  GOOGLE_CALLBACK_URL: z.url().optional(),
+  GOOGLE_PHOTOS_CALLBACK_URL: z.url().optional(),
 
   FRONTEND_URL: z.url(),
 

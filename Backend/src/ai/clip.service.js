@@ -35,20 +35,28 @@ function toJpegUrl(url) {
   return url.replace("/upload/", "/upload/f_jpg,q_auto/");
 }
 
+// Without a timeout, a slow/hanging Cloudinary response can hold the fetch
+// open indefinitely. The BullMQ worker only has `lockDuration` (5 min, see
+// worker.js) before the job is considered stalled and retried/duplicated —
+// better to fail fast here with a clear error than let that happen silently.
+const IMAGE_FETCH_TIMEOUT_MS = 20_000;
+
 export async function generateImageEmbedding(imageUrl) {
   if (!visionModel || !processor) {
     await loadClipModels();
   }
 
-  console.log("STEP 1 - Fetching Image for Embedding...");
+  logger.debug("Fetching image for CLIP embedding");
   try {
-    const response = await fetch(toJpegUrl(imageUrl));
+    const response = await fetch(toJpegUrl(imageUrl), {
+      signal: AbortSignal.timeout(IMAGE_FETCH_TIMEOUT_MS),
+    });
     if (!response.ok) throw new Error(`Fetch failed: ${response.status}`);
 
     const arrayBuffer = await response.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
 
-    console.log("STEP 2 - Decoding with Jimp (pure JS)...");
+    logger.debug("Decoding image with Jimp");
     const image = await Jimp.read(buffer);
     const { width, height } = image.bitmap;
 
@@ -62,17 +70,20 @@ export async function generateImageEmbedding(imageUrl) {
       rgbData[i * 3 + 2] = image.bitmap.data[idx + 2];
     }
 
-    console.log("STEP 3 - Constructing RawImage wrapper object...");
+    logger.debug("Constructing RawImage wrapper");
     const rawImage = new RawImage(rgbData, width, height, 3);
 
     const imageInputs = await processor(rawImage);
     const { image_embeds } = await visionModel(imageInputs);
 
-    console.log("STEP 4 - CLIP Embedding success!");
+    logger.debug("CLIP embedding generated successfully");
     return l2Normalize(Array.from(image_embeds.data));
   } catch (error) {
-    console.error("Critical error in CLIP embedding pipeline:", error);
-    return new Array(512).fill(0);
+    logger.error("Critical error in CLIP embedding pipeline", { error: error.message });
+    // Re-throw instead of returning a fake zero-vector: a zero-vector looks like a
+    // "valid" embedding to Qdrant/search code, silently poisoning search results.
+    // Throwing lets the caller (embedding.processor.js) mark the job FAILED and retry it.
+    throw error;
   }
 }
 

@@ -134,13 +134,17 @@ export async function login({ email, password }) {
   );
 
   if (!user || !isValid) {
+    // A Google-only account (passwordHash === null) is always compared
+    // against DUMMY_HASH above, so isValid is always false for it — the
+    // more specific "use Google Sign-In" message below was previously dead
+    // code because this generic check threw first in every case. Only
+    // decide the message here, after confirming *why* it failed.
+    if (user && !user.passwordHash) {
+      throw new AuthenticationError(
+        "This account uses Google Sign-In. Please log in with Google."
+      );
+    }
     throw new AuthenticationError("Invalid email or password");
-  }
-
-  if (!user.passwordHash) {
-    throw new AuthenticationError(
-      "This account uses Google Sign-In. Please log in with Google."
-    );
   }
 
   const { accessToken, refreshToken } = await issueTokenPair(user.id);

@@ -12,6 +12,8 @@ import {
   X,
   ChevronLeft,
   AlertCircle,
+  Images,
+  Compass,
 } from 'lucide-react'
 import { Skeleton } from '@/components/ui/skeleton'
 import { EmptyState } from '@/components/layout/EmptyState'
@@ -22,13 +24,15 @@ import {
   useMemoryDocuments,
   useMonthlyMemories,
   useTravelMemories,
+  useEvent,
 } from '@/hooks/useApi'
 import { cn } from '@/lib/utils'
 import type {
-  MemoryHighlight,
+  TopTrip,
+  DocumentGroup,
+  DocumentImage,
   MemoryPerson,
   MemoryEvent,
-  MemoryDocument,
   MemoryMonthly,
   MemoryTravel,
   Image,
@@ -190,18 +194,17 @@ function Section({
   )
 }
 
-function HighlightCard({
-  highlight,
-  onClick,
-}: {
-  highlight: MemoryHighlight
-  onClick: () => void
-}) {
-  const cover = highlight.images[0]
+function StatChip({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="flex-1 min-w-[100px] rounded-xl border border-border bg-card px-4 py-3">
+      <p className="text-lg font-semibold text-foreground">{value.toLocaleString()}</p>
+      <p className="text-xs text-muted-foreground mt-0.5">{label}</p>
+    </div>
+  )
+}
 
-const coverUrl = getThumbnailUrl(
-  cover?.cloudinaryUrl || cover?.url
-)
+function TripCard({ trip, onClick }: { trip: TopTrip; onClick: () => void }) {
+  const coverUrl = getThumbnailUrl(trip.coverImage?.cloudinaryUrl)
   return (
     <button
       onClick={onClick}
@@ -211,7 +214,7 @@ const coverUrl = getThumbnailUrl(
         {coverUrl ? (
           <img
             src={coverUrl}
-            alt={highlight.title}
+            alt={trip.title}
             className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
             loading="lazy"
           />
@@ -223,17 +226,19 @@ const coverUrl = getThumbnailUrl(
         <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
       </div>
       <div className="absolute bottom-0 left-0 right-0 p-3">
-        <p className="text-xs font-semibold text-white truncate">{highlight.title}</p>
+        <p className="text-xs font-semibold text-white truncate">{trip.title}</p>
         <p className="text-xs text-white/60 mt-0.5">
-          {highlight.images.length} {highlight.images.length === 1 ? 'photo' : 'photos'}
+          {trip.imageCount} {trip.imageCount === 1 ? 'photo' : 'photos'}
         </p>
       </div>
     </button>
   )
 }
 
-
-function HighlightDetail({ highlight, onBack }: { highlight: MemoryHighlight; onBack: () => void }) {
+function TripDetail({ trip, onBack }: { trip: TopTrip; onBack: () => void }) {
+  // topTrips only carries a single coverImage — fetch the full event to show
+  // every photo, same pattern EventsPage already uses for event detail.
+  const { data: event, isLoading, isError, error } = useEvent(trip.eventId)
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-3">
@@ -245,20 +250,36 @@ function HighlightDetail({ highlight, onBack }: { highlight: MemoryHighlight; on
           Memories
         </button>
         <div className="h-4 w-px bg-border" />
-        <h2 className="text-lg font-semibold text-foreground truncate">{highlight.title}</h2>
+        <h2 className="text-lg font-semibold text-foreground truncate">{trip.title}</h2>
       </div>
-      <ImageGrid images={highlight.images} />
+      {isLoading && (
+        <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-1.5">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <Skeleton key={i} className="aspect-square rounded-lg" />
+          ))}
+        </div>
+      )}
+      {isError && !isLoading && (
+        <div className="flex items-center gap-2 text-sm text-destructive bg-destructive/10 rounded-lg px-4 py-3">
+          <AlertCircle size={15} className="shrink-0" />
+          {(error as Error)?.message || 'Failed to load.'}
+        </div>
+      )}
+      {event && !isLoading && !isError && <ImageGrid images={event.images} />}
     </div>
   )
 }
 
 function HighlightsSection() {
-  const [selected, setSelected] = useState<MemoryHighlight | null>(null)
-  const { data: highlights = [], isLoading, isError, error } = useHighlights()
+  const [selectedTrip, setSelectedTrip] = useState<TopTrip | null>(null)
+  const { data: overview, isLoading, isError, error } = useHighlights()
 
-  if (selected) {
-    return <HighlightDetail highlight={selected} onBack={() => setSelected(null)} />
+  if (selectedTrip) {
+    return <TripDetail trip={selectedTrip} onBack={() => setSelectedTrip(null)} />
   }
+
+  const topTrips = overview?.topTrips ?? []
+  const topCategories = overview?.topCategories ?? []
 
   return (
     <Section
@@ -266,16 +287,40 @@ function HighlightsSection() {
       icon={<Sparkles size={15} />}
       iconColor="text-amber-500"
       iconBg="bg-amber-500/10"
-      count={highlights.length}
       loading={isLoading}
       error={isError ? (error as Error) : null}
-      empty={highlights.length === 0}
+      empty={!isLoading && !isError && !overview}
     >
-      <div className="flex gap-3 overflow-x-auto pb-2 -mx-1 px-1">
-        {highlights.map((h) => (
-          <HighlightCard key={h.id} highlight={h} onClick={() => setSelected(h)} />
-        ))}
-      </div>
+      {overview && (
+        <div className="space-y-4">
+          <div className="flex flex-wrap gap-2.5">
+            <StatChip label="Photos" value={overview.totalImages} />
+            <StatChip label="Events" value={overview.totalEvents} />
+            <StatChip label="People" value={overview.totalPeople} />
+          </div>
+
+          {topTrips.length > 0 && (
+            <div className="flex gap-3 overflow-x-auto pb-2 -mx-1 px-1">
+              {topTrips.map((trip, i) => (
+                <TripCard key={trip.eventId ?? `trip-${i}`} trip={trip} onClick={() => setSelectedTrip(trip)} />
+              ))}
+            </div>
+          )}
+
+          {topCategories.length > 0 && (
+            <div className="flex flex-wrap gap-2">
+              {topCategories.map((c, i) => (
+                <span
+                  key={c.slug ?? `category-${i}`}
+                  className="text-xs text-muted-foreground bg-secondary px-2.5 py-1 rounded-full"
+                >
+                  {c.label} · {c.imageCount}
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
     </Section>
   )
 }
@@ -321,8 +366,8 @@ function EventsMemorySection() {
     <Section
       title="Event Memories"
       icon={<CalendarDays size={15} />}
-      iconColor="text-violet-500"
-      iconBg="bg-violet-500/10"
+      iconColor="text-gold-500"
+      iconBg="bg-gold-500/10"
       count={events.length}
       loading={isLoading}
       error={isError ? (error as Error) : null}
@@ -334,8 +379,8 @@ function EventsMemorySection() {
             key={event.id}
             className="flex items-center gap-3 rounded-xl border border-border bg-card p-4"
           >
-            <div className="w-9 h-9 rounded-lg bg-violet-500/10 flex items-center justify-center shrink-0">
-              <CalendarDays size={16} className="text-violet-500" />
+            <div className="w-9 h-9 rounded-lg bg-gold-500/10 flex items-center justify-center shrink-0">
+              <CalendarDays size={16} className="text-gold-500" />
             </div>
             <div className="min-w-0">
               <p className="text-sm font-medium text-foreground truncate">{event.title}</p>
@@ -470,30 +515,38 @@ function MonthlySection() {
 
 // ─── Documents Section ────────────────────────────────────────────────────────
 
-function DocumentsSection() {
-  const { data: documents = [], isLoading, isError, error } = useMemoryDocuments()
+function formatDocType(type: string) {
+  const labels: Record<string, string> = {
+    id: 'ID Documents',
+    certificate: 'Certificates',
+    medical: 'Medical',
+    financial: 'Financial',
+    invoice: 'Invoices',
+    other: 'Other',
+  }
+  return labels[type] || type.charAt(0).toUpperCase() + type.slice(1)
+}
+
+function DocumentGroupCard({ group }: { group: DocumentGroup }) {
   return (
-    <Section
-      title="Documents"
-      icon={<BookOpen size={15} />}
-      iconColor="text-orange-500"
-      iconBg="bg-orange-500/10"
-      count={documents.length}
-      loading={isLoading}
-      error={isError ? (error as Error) : null}
-      empty={documents.length === 0}
-    >
+    <div className="space-y-2.5">
+      <div className="flex items-center gap-2">
+        <p className="text-sm font-medium text-foreground">{formatDocType(group.type)}</p>
+        <span className="text-xs text-muted-foreground bg-secondary px-2 py-0.5 rounded-full">
+          {group.count}
+        </span>
+      </div>
       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-        {documents.map((doc: MemoryDocument) => (
+        {group.images.map((doc: DocumentImage, i) => (
           <div
-            key={doc.id}
+            key={doc.id ?? `${group.type}-doc-${i}`}
             className="rounded-xl border border-border bg-card overflow-hidden"
           >
             <div className="aspect-[3/2] w-full bg-secondary overflow-hidden">
-              {doc.imageUrl ? (
+              {doc.cloudinaryUrl ? (
                 <img
-                  src={doc.imageUrl}
-                  alt={doc.title || 'Document'}
+                  src={getThumbnailUrl(doc.cloudinaryUrl)}
+                  alt={doc.filename || 'Document'}
                   className="w-full h-full object-cover"
                   loading="lazy"
                 />
@@ -505,10 +558,35 @@ function DocumentsSection() {
             </div>
             <div className="p-3">
               <p className="text-xs font-medium text-foreground truncate">
-                {doc.title || 'Untitled document'}
+                {doc.filename || 'Untitled document'}
               </p>
             </div>
           </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function DocumentsSection() {
+  // Grouped by document type (id/certificate/medical/financial/invoice/other),
+  // not a flat list — see DocumentsOverview.
+  const { data: overview, isLoading, isError, error } = useMemoryDocuments()
+  const groups = overview?.groups ?? []
+  return (
+    <Section
+      title="Documents"
+      icon={<BookOpen size={15} />}
+      iconColor="text-orange-500"
+      iconBg="bg-orange-500/10"
+      count={overview?.totalDocuments}
+      loading={isLoading}
+      error={isError ? (error as Error) : null}
+      empty={!isLoading && !isError && groups.length === 0}
+    >
+      <div className="space-y-5">
+        {groups.map((group, i) => (
+          <DocumentGroupCard key={group.type ?? `group-${i}`} group={group} />
         ))}
       </div>
     </Section>

@@ -1,8 +1,8 @@
 import path from "path";
 import { fileURLToPath } from "url";
-import "@tensorflow/tfjs-backend-cpu";
 import * as tf from "@tensorflow/tfjs";
-import * as faceapi from "face-api.js";
+import * as wasm from "@tensorflow/tfjs-backend-wasm";
+import * as faceapi from "@vladmandic/face-api/dist/face-api.node-wasm.js";
 import logger from "../lib/logger.js";
 import { Jimp } from "jimp";
 
@@ -15,9 +15,12 @@ let modelsLoading = null;
 export async function loadFaceModels() {
   if (modelsLoaded) return;
   if (modelsLoading) return modelsLoading;
+  
 
   modelsLoading = (async () => {
     const start = Date.now();
+    await tf.setBackend("wasm");
+    await tf.ready();
     logger.info("Loading face-api models", { dir: MODELS_DIR });
 
     await Promise.all([
@@ -33,9 +36,12 @@ export async function loadFaceModels() {
 
   return modelsLoading;
 }
+  function toJpegUrl(url) {
+  return url.replace("/upload/", "/upload/f_jpg,q_auto/");
+}
 
 async function fetchImageAsTensor(imageUrl) {
-  const response = await fetch(imageUrl);
+   const response = await fetch(toJpegUrl(imageUrl)); 
   if (!response.ok) throw new Error(`Fetch failed: ${response.status}`);
 
   const arrayBuffer = await response.arrayBuffer();
@@ -61,7 +67,6 @@ export async function detectFaces(imageUrl) {
   if (!modelsLoaded) {
     await loadFaceModels();
   }
-
   const tensor = await fetchImageAsTensor(imageUrl);
 
   try {

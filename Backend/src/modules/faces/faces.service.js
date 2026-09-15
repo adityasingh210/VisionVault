@@ -8,8 +8,9 @@ export async function listFaceClusters(userId) {
       id: true,
       label: true,
       createdAt: true,
-      _count: { select: { faces: true } },
+      _count: { select: { faces: { where: { image: { deletedAt: null } } } } },
       faces: {
+        where: { image: { deletedAt: null } },
         take: 1,
         orderBy: { createdAt: "asc" },
         select: {
@@ -23,7 +24,9 @@ export async function listFaceClusters(userId) {
   });
 
   return {
-    clusters: clusters.map((c) => ({
+    clusters: clusters
+      .filter((c) => c._count.faces > 0)
+      .map((c) => ({
       id: c.id,
       label: c.label,
       faceCount: c._count.faces,
@@ -41,6 +44,7 @@ export async function getFaceClusterById(clusterId, userId) {
       label: true,
       createdAt: true,
       faces: {
+        where: { image: { deletedAt: null } },
         select: {
           id: true,
           bboxX: true,

@@ -1,0 +1,32 @@
+[
+  {
+    "query": "dog",
+    "imageUrl": "https://images.unsplash.com/photo-1543466835-00a7907e9de1",
+    "relevant": true
+  },
+  {
+    "query": "dog",
+    "imageUrl": "https://images.unsplash.com/photo-1441986300917-64674bd600d8",
+    "relevant": false
+  },
+  {
+    "query": "cat",
+    "imageUrl": "https://images.unsplash.com/photo-1514888286974-6c03e2ca1dba",
+    "relevant": true
+  },
+  {
+    "query": "cat",
+    "imageUrl": "https://images.unsplash.com/photo-1543466835-00a7907e9de1",
+    "relevant": false
+  },
+  {
+    "query": "birthday cake",
+    "imageUrl": "https://images.unsplash.com/photo-1464349095431-e9a21285b5f3",
+    "relevant": true
+  },
+  {
+    "query": "birthday cake",
+    "imageUrl": "https://images.unsplash.com/photo-1516117172878-fd2c41f4a759",
+    "relevant": false
+  }
+]

@@ -70,14 +70,14 @@ function hammingDistance(hexA, hexB) {
 
 async function findExactDuplicate(sha256Hash, userId, excludeImageId) {
   return prisma.image.findFirst({
-    where: { sha256Hash, userId, id: { not: excludeImageId } },
+    where: { sha256Hash, userId, id: { not: excludeImageId }, deletedAt: null },
     select: { id: true },
   });
 }
 
 async function fetchUserPhashes(userId, excludeImageId) {
   return prisma.image.findMany({
-    where: { userId, id: { not: excludeImageId }, phash: { not: null } },
+    where: { userId, id: { not: excludeImageId }, phash: { not: null }, deletedAt: null },
     select: { id: true, phash: true },
   });
 }
@@ -218,6 +218,7 @@ export async function processHashJob(job) {
       { imageId, jobType: "OCR",       status: "QUEUED" },
       { imageId, jobType: "EMBEDDING", status: "QUEUED" },
       { imageId, jobType: "CATEGORY",  status: "QUEUED" },
+      { imageId, jobType: "FACE",      status: "QUEUED" },
     ],
     skipDuplicates: true,
   });
@@ -231,6 +232,9 @@ export async function processHashJob(job) {
     ),
     enqueueCategoryJob(imageId).catch((err) =>
       logger.error("Failed to enqueue category job", { imageId, error: err.message })
+    ),
+    enqueueFaceJob(imageId).catch((err) =>
+      logger.error("Failed to enqueue face job", { imageId, error: err.message })
     ),
   ]);
 

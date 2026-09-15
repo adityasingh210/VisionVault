@@ -54,15 +54,23 @@ export interface SearchResult {
   signals?: string[]
   parsedQuery?: object
 }
+// Confirmed exact shapes with backend — no more field-name guessing.
 export interface FaceCluster {
   id: string
-  label?: string
-  count?: number
+  label?: string | null
+  faceCount: number
+  representativeImage?: {
+    id: string
+    cloudinaryUrl: string
+    width?: number
+    height?: number
+  } | null
+  createdAt?: string
 }
 
 export interface FaceClusterDetail {
   id: string
-  label?: string
+  label?: string | null
   images: Image[]
 }
 
@@ -84,10 +92,48 @@ export interface PhotoEventDetail extends PhotoEvent {
   images: Image[]
 }
 
-export interface MemoryHighlight {
-  id: string
+// GET /api/memories/highlights returns a single dashboard-style stats
+// object (confirmed with backend) — not a list of "highlight cards".
+export interface TopCategory {
+  slug: string
+  label: string
+  imageCount: number
+}
+
+export interface TopLocation {
+  eventId: string
   title: string
-  images: Image[]
+  lat: number
+  lng: number
+  imageCount: number
+}
+
+export interface TripCoverImage {
+  id: string
+  cloudinaryUrl: string
+  filename?: string
+  takenAt?: string
+  width?: number
+  height?: number
+}
+
+export interface TopTrip {
+  eventId: string
+  title: string
+  startAt?: string
+  endAt?: string
+  imageCount: number
+  coverImage?: TripCoverImage
+}
+
+export interface MemoriesOverview {
+  totalImages: number
+  totalEvents: number
+  totalPeople: number
+  topCategories: TopCategory[]
+  topLocations: TopLocation[]
+  topTrips: TopTrip[]
+  dateRange: { from: string; to: string }
 }
 
 export interface MemoryPerson {
@@ -102,10 +148,28 @@ export interface MemoryEvent {
   imageCount?: number
 }
 
-export interface MemoryDocument {
+// GET /api/memories/documents returns documents grouped by type (id,
+// certificate, medical, financial, invoice, other), not a flat list.
+export interface DocumentImage {
   id: string
-  title?: string
-  imageUrl?: string
+  cloudinaryUrl: string
+  filename?: string
+  takenAt?: string
+  width?: number
+  height?: number
+  ocrConfidence?: number
+  categoryConfidence?: number
+}
+
+export interface DocumentGroup {
+  type: string
+  count: number
+  images: DocumentImage[]
+}
+
+export interface DocumentsOverview {
+  totalDocuments: number
+  groups: DocumentGroup[]
 }
 
 export interface MemoryMonthly {

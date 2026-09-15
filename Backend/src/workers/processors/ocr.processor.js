@@ -84,12 +84,12 @@ export async function processOcrJob(job) {
       create: {
         imageId,
         rawText: ocrResult.rawText,
-        language: ocrResult.language || "en",
+        language: ocrResult.language || "eng",
         confidence: safeConfidence, 
       },
       update: {
         rawText: ocrResult.rawText,
-        language: ocrResult.language || "en",
+        language: ocrResult.language || "eng",
         confidence: safeConfidence,
       },
     });

@@ -21,6 +21,7 @@ import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useInfiniteImages, useDeleteImage } from '@/hooks/useApi'
 import { cn } from '@/lib/utils'
+import { getApiErrorMessage } from '@/api/client'
 import type { GetImagesParams } from '@/api/images'
 import type { Image } from '@/types'
 
@@ -212,6 +213,9 @@ export default function GalleryPage() {
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [selectionMode, setSelectionMode] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
+  const [confirmBulkDelete, setConfirmBulkDelete] = useState(false)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
+  const [isBulkDeleting, setIsBulkDeleting] = useState(false)
   const loaderRef = useRef<HTMLDivElement>(null)
 
   const sort = SORT_OPTIONS[sortIdx]
@@ -231,6 +235,12 @@ export default function GalleryPage() {
   }, [hasNextPage, isFetchingNextPage, fetchNextPage])
 
   const toggleSelect = useCallback((id: string) => {
+    // Selecting a photo (e.g. tapping its checkbox) always puts the gallery
+    // into selection mode, so a second tap on another photo selects it too
+    // instead of opening the lightbox. Previously this only worked if
+    // "Select" had already been pressed, so most people could only ever
+    // check one photo at a time.
+    setSelectionMode(true)
     setSelected(prev => {
       const next = new Set(prev)
       next.has(id) ? next.delete(id) : next.add(id)
@@ -239,18 +249,47 @@ export default function GalleryPage() {
   }, [])
 
   const handleDelete = async (id: string) => {
-    await deleteImage.mutateAsync(id)
-    if (lightboxIdx !== null) setLightboxIdx(null)
-    setConfirmDelete(null)
-    setSelected(prev => { const n = new Set(prev); n.delete(id); return n })
+    try {
+      await deleteImage.mutateAsync(id)
+      if (lightboxIdx !== null) setLightboxIdx(null)
+      setConfirmDelete(null)
+      setSelected(prev => { const n = new Set(prev); n.delete(id); return n })
+    } catch (err) {
+      setConfirmDelete(null)
+      setDeleteError(getApiErrorMessage(err))
+    }
   }
 
   const handleBulkDelete = async () => {
-    for (const id of selected) {
-      await deleteImage.mutateAsync(id)
+    const ids = Array.from(selected)
+    setConfirmBulkDelete(false)
+    setDeleteError(null)
+    setIsBulkDeleting(true)
+
+    // Delete concurrently and track each outcome individually, so one
+    // failure doesn't silently abort the rest of the batch (a plain
+    // sequential for-await loop would throw on the first error and leave
+    // every photo after it un-deleted with no feedback to the user).
+    const results = await Promise.allSettled(ids.map((id) => deleteImage.mutateAsync(id)))
+
+    const failedIds = ids.filter((_, i) => results[i].status === 'rejected')
+    const firstFailure = results.find((r) => r.status === 'rejected') as
+      | PromiseRejectedResult
+      | undefined
+
+    setSelected(new Set(failedIds))
+    setIsBulkDeleting(false)
+
+    if (failedIds.length > 0) {
+      const reason = firstFailure ? getApiErrorMessage(firstFailure.reason) : 'Something went wrong'
+      setDeleteError(
+        failedIds.length === ids.length
+          ? reason
+          : `${failedIds.length} of ${ids.length} photos couldn't be deleted: ${reason}`
+      )
+    } else {
+      setSelectionMode(false)
     }
-    setSelected(new Set())
-    setSelectionMode(false)
   }
 
 const totalCount =
@@ -311,15 +350,19 @@ const totalCount =
               <Button
                 variant="destructive"
                 size="sm"
-                disabled={selected.size === 0 || deleteImage.isPending}
-                onClick={handleBulkDelete}
+                disabled={selected.size === 0 || isBulkDeleting}
+                onClick={() => setConfirmBulkDelete(true)}
               >
-                {deleteImage.isPending
+                {isBulkDeleting
                   ? <Loader2 size={13} className="mr-1.5 animate-spin" />
                   : <Trash2 size={13} className="mr-1.5" />}
                 Delete {selected.size > 0 ? `(${selected.size})` : ''}
               </Button>
-              <Button variant="outline" size="sm" onClick={() => { setSelectionMode(false); setSelected(new Set()) }}>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => { setSelectionMode(false); setSelected(new Set()); setDeleteError(null) }}
+              >
                 Cancel
               </Button>
             </>
@@ -345,6 +388,19 @@ const totalCount =
           )}
         </div>
       </div>
+
+      {/* ── Bulk delete error ── */}
+      {deleteError && (
+        <div className="flex items-center justify-between gap-3 px-6 py-2.5 border-b border-destructive/20 bg-destructive/10 animate-slide-up">
+          <p className="text-sm text-destructive">{deleteError}</p>
+          <button
+            onClick={() => setDeleteError(null)}
+            className="text-destructive/70 hover:text-destructive transition-colors shrink-0"
+          >
+            <X size={14} />
+          </button>
+        </div>
+      )}
 
       {/* ── Filter bar ── */}
       {showFilters && (
@@ -420,9 +476,28 @@ const totalCount =
           index={lightboxIdx}
           onClose={() => setLightboxIdx(null)}
           onNavigate={setLightboxIdx}
-          onDelete={handleDelete}
+          onDelete={(id) => setConfirmDelete(id)}
           deleting={deleteImage.isPending}
         />
+      )}
+
+      {/* ── Confirm delete (bulk) ── */}
+      {confirmBulkDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="bg-card border border-border rounded-xl p-6 max-w-sm w-full mx-4 shadow-2xl">
+            <h3 className="text-base font-semibold text-foreground">
+              Delete {selected.size} photo{selected.size !== 1 ? 's' : ''}?
+            </h3>
+            <p className="text-sm text-muted-foreground mt-1.5">This action cannot be undone.</p>
+            <div className="flex gap-2 mt-5 justify-end">
+              <Button variant="outline" size="sm" onClick={() => setConfirmBulkDelete(false)}>Cancel</Button>
+              <Button variant="destructive" size="sm" onClick={handleBulkDelete}>
+                <Trash2 size={13} className="mr-1.5" />
+                Delete {selected.size}
+              </Button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* ── Confirm delete (single) ── */}

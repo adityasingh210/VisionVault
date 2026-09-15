@@ -43,10 +43,10 @@ export default {
           1: 'hsl(var(--surface-1))',
           2: 'hsl(var(--surface-2))',
         },
-        violet: {
-          400: '#a78bfa',
-          500: '#8b5cf6',
-          600: '#7c3aed',
+        gold: {
+          400: '#f4c869',
+          500: '#e8a93d',
+          600: '#c9891f',
         },
       },
       borderRadius: {

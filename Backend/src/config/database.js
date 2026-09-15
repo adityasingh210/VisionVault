@@ -1,4 +1,5 @@
 import { PrismaPg } from "@prisma/adapter-pg";
+import fs from "fs";
 import { Pool } from "pg";
 import { PrismaClient } from "@prisma/client";
 import { env } from "./env.js";
@@ -6,10 +7,13 @@ import logger from "../lib/logger.js";
 
 
 const pool = new Pool({
-  connectionString: env.DATABASE_URL,
-  max: 10,
+  connectionString: process.env.DATABASE_URL,
+  max: 5,                   
   idleTimeoutMillis: 30_000,
   connectionTimeoutMillis: 5_000,
+  ssl: {
+    ca: fs.readFileSync("./ca.pem")
+  }
 });
 
 const adapter = new PrismaPg(pool);
@@ -40,7 +44,9 @@ prisma.$on("warn", (e) => {
 });
 
 prisma.$on("error", (e) => {
-  logger.error("Prisma error", { message: e.message });
+  logger.error("Prisma error", { message: e });
+  logger.error("Prisma error:", e);
+    console.error(e);
 });
 
 export async function connectDatabase() {

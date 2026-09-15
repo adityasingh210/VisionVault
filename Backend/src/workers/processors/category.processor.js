@@ -27,6 +27,29 @@ async function allJobsComplete(imageId) {
   });
   return pending === 0;
 }
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * Polls Qdrant for a point with this image's UUID as its ID, retrying with a
+ * short delay. Used to close the race between the CATEGORY and EMBEDDING
+ * jobs (see M4 in the audit): the embedding job is what actually creates the
+ * point, and the two jobs run concurrently off the same hash job.
+ */
+async function waitForQdrantPoint(imageId, attempts = 5, delayMs = 500) {
+  for (let i = 0; i < attempts; i++) {
+    const points = await qdrantClient.retrieve(COLLECTIONS.IMAGE_EMBEDDINGS, {
+      ids: [imageId],
+      with_payload: false,
+      with_vector: false,
+    });
+    if (points.length > 0) return true;
+    if (i < attempts - 1) await sleep(delayMs);
+  }
+  return false;
+}
+
 export async function seedCategories() {
   await Promise.all(
     CATEGORIES.map((c) =>
@@ -104,12 +127,26 @@ export async function processCategoryJob(job) {
   );
   const topCategory = predictions[0]?.slug ?? "other";
   try {
-  await qdrantClient.setPayload(COLLECTIONS.IMAGE_EMBEDDINGS, {
-  payload: { category: topCategory },
-  filter: {
-    must: [{ key: "image_id", match: { value: imageId } }],
-  },
-});
+    // The EMBEDDING job runs concurrently and may not have upserted this
+    // image's Qdrant point yet. setPayload's filter-based update silently
+    // matches zero points in that case (Qdrant reports no affected-point
+    // count either way), permanently leaving the payload's category stuck
+    // at whatever the embedding job baked in (often "other"). Poll briefly
+    // for the point to actually exist before writing the payload.
+    const pointReady = await waitForQdrantPoint(imageId);
+    if (!pointReady) {
+      logger.warn(
+        "Qdrant point for image not found after retries — category payload not synced, embedding job may still be running or failed",
+        { imageId }
+      );
+    } else {
+      await qdrantClient.setPayload(COLLECTIONS.IMAGE_EMBEDDINGS, {
+        payload: { category: topCategory },
+        filter: {
+          must: [{ key: "image_id", match: { value: imageId } }],
+        },
+      });
+    }
   } catch (err) {
     logger.warn("Could not update Qdrant category payload", {
       imageId,

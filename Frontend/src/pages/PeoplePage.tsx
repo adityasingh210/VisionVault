@@ -29,7 +29,7 @@ function Lightbox({
   onNavigate: (i: number) => void
 }) {
   const img = images[index]
- const url =img?.cloudinaryUrl ||img?.url ||img?.thumbnailUrl ||''
+  const url = img?.cloudinaryUrl || img?.url || ''
 
   if (!img) return null
 
@@ -84,9 +84,13 @@ function PersonCard({
   cluster: FaceCluster
   onClick: () => void
 }) {
-  const thumbnail = null
+  // Confirmed exact backend shape: `faceCount` and `representativeImage.cloudinaryUrl`
+  // — no other field-name aliases exist, so read them directly.
+  const thumbnail = cluster.representativeImage?.cloudinaryUrl
+    ? getThumbnailUrl(cluster.representativeImage.cloudinaryUrl)
+    : null
   const name = cluster.label || 'Unknown Person'
-  const count = cluster.count ?? 0
+  const count = cluster.faceCount ?? 0
 
   return (
     <button
@@ -158,9 +162,9 @@ function PersonDetail({
             <Skeleton className="w-10 h-10 rounded-full" />
           ) : (
             <div className="w-10 h-10 rounded-full overflow-hidden bg-surface-2 ring-2 ring-border shrink-0">
-              {data?.images?.[0]?.thumbnailUrl ? (
+              {data?.images?.[0]?.cloudinaryUrl || data?.images?.[0]?.url ? (
                 <img
-                  src={getThumbnailUrl(data.images[0].cloudinaryUrl)}
+                  src={getThumbnailUrl(data.images[0].cloudinaryUrl || data.images[0].url)}
                   alt={name}
                   className="w-full h-full object-cover"
                 />

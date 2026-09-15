@@ -11,6 +11,17 @@ const THUMB_SELECT = {
   height: true,
 };
 
+// coverImage is a direct to-one relation, so unlike eventImages (a to-many
+// relation) Prisma can't filter it with a nested `where`. Select deletedAt
+// alongside THUMB_SELECT and use this to null out a soft-deleted cover image
+// after the fact instead of returning a dead Cloudinary URL.
+const COVER_IMAGE_SELECT = { select: { ...THUMB_SELECT, deletedAt: true } };
+function safeCoverImage(image) {
+  if (!image || image.deletedAt) return null;
+  const { deletedAt, ...rest } = image;
+  return rest;
+}
+
 /**
  *
  * @param {string} userId
@@ -34,7 +45,7 @@ export async function getHighlights(userId) {
     prisma.faceCluster.count({
       where: {
         userId,
-        faces: { some: {} },
+        faces: { some: { image: { deletedAt: null } } },
       },
     }),
     prisma.imageCategory.groupBy({
@@ -57,7 +68,7 @@ export async function getHighlights(userId) {
         title: true,
         locationLat: true,
         locationLng: true,
-        _count: { select: { eventImages: true } },
+        _count: { select: { eventImages: { where: { image: { deletedAt: null } } } } },
       },
       orderBy: { eventImages: { _count: "desc" } },
       take: 5,
@@ -79,10 +90,10 @@ export async function getHighlights(userId) {
         startAt: true,
         endAt: true,
         coverImageId: true,
-        coverImage: { select: THUMB_SELECT },
+        coverImage: COVER_IMAGE_SELECT,
         locationLat: true,
         locationLng: true,
-        _count: { select: { eventImages: true } },
+        _count: { select: { eventImages: { where: { image: { deletedAt: null } } } } },
       },
       orderBy: { eventImages: { _count: "desc" } },
       take: 5,
@@ -115,8 +126,8 @@ export async function getHighlights(userId) {
   const topLocations = topLocationsRaw.map((e) => ({
     eventId: e.id,
     title: e.title,
-    lat: e.locationLat ? parseFloat(e.locationLat) : null,
-    lng: e.locationLng ? parseFloat(e.locationLng) : null,
+    lat: e.locationLat != null ? parseFloat(e.locationLat) : null,
+    lng: e.locationLng != null ? parseFloat(e.locationLng) : null,
     imageCount: e._count.eventImages,
   }));
 
@@ -126,9 +137,9 @@ export async function getHighlights(userId) {
     startAt: e.startAt,
     endAt: e.endAt,
     imageCount: e._count.eventImages,
-    lat: e.locationLat ? parseFloat(e.locationLat) : null,
-    lng: e.locationLng ? parseFloat(e.locationLng) : null,
-    coverImage: e.coverImage ?? null,
+    lat: e.locationLat != null ? parseFloat(e.locationLat) : null,
+    lng: e.locationLng != null ? parseFloat(e.locationLng) : null,
+    coverImage: safeCoverImage(e.coverImage),
   }));
 
   logger.info("Highlights fetched", { userId, totalImages, totalEvents, totalPeople });
@@ -156,7 +167,7 @@ export async function getMostPhotographedPeople(userId, options = {}) {
   const clusters = await prisma.faceCluster.findMany({
     where: {
       userId,
-      faces: { some: {} },
+      faces: { some: { image: { deletedAt: null } } },
     },
     select: {
       id: true,
@@ -168,7 +179,6 @@ export async function getMostPhotographedPeople(userId, options = {}) {
           imageId: true,
           image: {
             select: { takenAt: true },
-            where: COMPLETED_IMAGE,
           },
         },
         where: {
@@ -250,8 +260,8 @@ export async function getTopEvents(userId, options = {}) {
       endAt: true,
       locationLat: true,
       locationLng: true,
-      coverImage: { select: THUMB_SELECT },
-      _count: { select: { eventImages: true } },
+      coverImage: COVER_IMAGE_SELECT,
+      _count: { select: { eventImages: { where: { image: { deletedAt: null } } } } },
     },
     orderBy: { eventImages: { _count: "desc" } },
     take: limit,
@@ -274,9 +284,9 @@ export async function getTopEvents(userId, options = {}) {
       startAt: e.startAt,
       endAt: e.endAt,
       durationDays,
-      lat: e.locationLat ? parseFloat(e.locationLat) : null,
-      lng: e.locationLng ? parseFloat(e.locationLng) : null,
-      coverImage: e.coverImage ?? null,
+      lat: e.locationLat != null ? parseFloat(e.locationLat) : null,
+      lng: e.locationLng != null ? parseFloat(e.locationLng) : null,
+      coverImage: safeCoverImage(e.coverImage),
     };
   });
 }
@@ -476,9 +486,10 @@ export async function getTravelSummary(userId, options = {}) {
       endAt: true,
       locationLat: true,
       locationLng: true,
-      coverImage: { select: THUMB_SELECT },
-      _count: { select: { eventImages: true } },
+      coverImage: COVER_IMAGE_SELECT,
+      _count: { select: { eventImages: { where: { image: { deletedAt: null } } } } },
       eventImages: {
+        where: { image: COMPLETED_IMAGE },
         select: {
           image: {
             select: {
@@ -488,7 +499,6 @@ export async function getTravelSummary(userId, options = {}) {
                 take: 1,
               },
             },
-            where: COMPLETED_IMAGE,
           },
         },
         take: 20,
@@ -523,9 +533,9 @@ export async function getTravelSummary(userId, options = {}) {
     startAt: e.startAt,
     endAt: e.endAt,
     imageCount: e._count.eventImages,
-    lat: e.locationLat ? parseFloat(e.locationLat) : null,
-    lng: e.locationLng ? parseFloat(e.locationLng) : null,
-    coverImage: e.coverImage ?? null,
+    lat: e.locationLat != null ? parseFloat(e.locationLat) : null,
+    lng: e.locationLng != null ? parseFloat(e.locationLng) : null,
+    coverImage: safeCoverImage(e.coverImage),
   }));
 
   return {
@@ -539,8 +549,8 @@ function buildVisitedPlaces(events) {
   const places = [];
 
   for (const event of events) {
-    const lat = event.locationLat ? parseFloat(event.locationLat) : null;
-    const lng = event.locationLng ? parseFloat(event.locationLng) : null;
+    const lat = event.locationLat != null ? parseFloat(event.locationLat) : null;
+    const lng = event.locationLng != null ? parseFloat(event.locationLng) : null;
 
     if (!lat || !lng) {
       places.push({
@@ -554,7 +564,7 @@ function buildVisitedPlaces(events) {
       continue;
     }
     const nearby = places.find((p) => {
-      if (!p.lat) return false;
+      if (p.lat == null) return false;
       return haversineKm(p.lat, p.lng, lat, lng) < 50;
     });
 

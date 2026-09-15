@@ -11,7 +11,7 @@ export function AuthLayout() {
             <div className="w-9 h-9 rounded-xl bg-primary/20 flex items-center justify-center">
               <Aperture className="text-primary" size={20} />
             </div>
-            <span className="text-xl font-semibold text-foreground">PhotoMind</span>
+            <span className="text-xl font-semibold text-foreground">VisionVault</span>
           </div>
           <Outlet />
         </div>

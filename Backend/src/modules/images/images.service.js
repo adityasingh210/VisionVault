@@ -1,6 +1,7 @@
 import { fileTypeFromBuffer } from "file-type";
 import prisma from "../../config/database.js";
 import cloudinary from "../../config/cloudinary.js";
+import qdrantClient, { COLLECTIONS } from "../../config/qdrant.js";
 import { enqueueHashJob } from "../../workers/queues/image.queue.js";
 import { NotFoundError, ValidationError, ForbiddenError } from "../../lib/errors.js";
 import { env } from "../../config/env.js";
@@ -174,6 +175,7 @@ export async function getImages(userId, query) {
 
   const where = {
     userId,
+    deletedAt: null,
     ...(query.source && { source: query.source }),
     ...(query.status && { processingStatus: query.status }),
   };
@@ -181,7 +183,7 @@ export async function getImages(userId, query) {
   const images = await prisma.image.findMany({
     where,
     select: imageSelectFields,
-    orderBy: { createdAt: "desc" },
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
     take: limit + 1,
     skip: query.cursor ? 1 : 0,
     ...(query.cursor && { cursor: { id: query.cursor } }),
@@ -205,6 +207,7 @@ export async function getImageById(imageId, userId) {
     where: { id: imageId },
     select: {
       ...imageSelectFields,
+      deletedAt: true,
       ocrRecord: {
         select: { rawText: true, language: true, confidence: true },
       },
@@ -227,10 +230,11 @@ export async function getImageById(imageId, userId) {
     },
   });
 
-  if (!image) throw new NotFoundError("Image");
+  if (!image || image.deletedAt) throw new NotFoundError("Image");
   if (image.userId !== userId) throw new ForbiddenError();
 
-  return serializeImage(image);
+  const { deletedAt, ...publicImage } = image;
+  return serializeImage(publicImage);
 }
 
 export async function getImageProcessingStatus(imageId, userId) {
@@ -268,7 +272,12 @@ export async function getImageProcessingStatus(imageId, userId) {
 export async function deleteImage(imageId, userId) {
   const image = await prisma.image.findUnique({
     where: { id: imageId },
-    select: { id: true, userId: true, cloudinaryId: true },
+    select: {
+      id: true,
+      userId: true,
+      cloudinaryId: true,
+      faces: { select: { qdrantId: true } },
+    },
   });
 
   if (!image) throw new NotFoundError("Image");
@@ -278,13 +287,21 @@ export async function deleteImage(imageId, userId) {
     resource_type: "image",
   });
 
-  await prisma.image.delete({ where: { id: imageId } });
+  await cleanupQdrantForImages([image]);
+
+  // Soft delete: rows are kept (OcrRecord/Face/ImageCategory/etc are no longer
+  // cascade-removed since the Image row itself isn't hard-deleted), and every
+  // read path that matters already filters on `deletedAt: null`.
+  await prisma.image.update({
+    where: { id: imageId },
+    data: { deletedAt: new Date() },
+  });
 }
 
 export async function bulkDeleteImages(imageIds, userId) {
   const images = await prisma.image.findMany({
-    where: { id: { in: imageIds }, userId },
-    select: { id: true, cloudinaryId: true },
+    where: { id: { in: imageIds }, userId, deletedAt: null },
+    select: { id: true, cloudinaryId: true, faces: { select: { qdrantId: true } } },
   });
 
   if (images.length === 0) throw new NotFoundError("Images");
@@ -304,14 +321,50 @@ export async function bulkDeleteImages(imageIds, userId) {
     }
   });
 
+  await cleanupQdrantForImages(images);
+
   const deletedIds = images.map((img) => img.id);
-  await prisma.image.deleteMany({ where: { id: { in: deletedIds } } });
+  await prisma.image.updateMany({
+    where: { id: { in: deletedIds } },
+    data: { deletedAt: new Date() },
+  });
 
   return { deleted: deletedIds.length };
 }
 
+/**
+ * Removes the Qdrant points for a batch of images (their semantic-search
+ * vector) and every face vector belonging to them, so deleting an image never
+ * leaves ghost vectors behind that later pollute search results/pagination
+ * totals or get face-clustered against a photo the user already deleted.
+ *
+ * @param {Array<{ id: string, faces?: Array<{ qdrantId: string }> }>} images
+ */
+async function cleanupQdrantForImages(images) {
+  const imageIds = images.map((img) => img.id);
+  const faceQdrantIds = images.flatMap((img) => (img.faces ?? []).map((f) => f.qdrantId));
+
+  const results = await Promise.allSettled([
+    qdrantClient.delete(COLLECTIONS.IMAGE_EMBEDDINGS, { wait: true, points: imageIds }),
+    faceQdrantIds.length
+      ? qdrantClient.delete(COLLECTIONS.FACE_EMBEDDINGS, { wait: true, points: faceQdrantIds })
+      : Promise.resolve(),
+  ]);
+
+  results.forEach((result, i) => {
+    if (result.status === "rejected") {
+      logger.warn("Qdrant cleanup failed during image delete", {
+        collection: i === 0 ? COLLECTIONS.IMAGE_EMBEDDINGS : COLLECTIONS.FACE_EMBEDDINGS,
+        imageIds,
+        error: result.reason?.message,
+      });
+    }
+  });
+}
+
 export async function searchImagesByOcr(userId, query) {
   const limit = Math.min(query.limit ?? env.DEFAULT_PAGE_SIZE, env.MAX_PAGE_SIZE);
+  const offset = query.offset ?? 0;
   const searchQuery = query.q.trim();
   const tsQuery = searchQuery
     .split(/\s+/)
@@ -322,16 +375,17 @@ export async function searchImagesByOcr(userId, query) {
   const rawResults = await prisma.$queryRaw`
     SELECT
       i.id,
-      ocr."rawText",
-      ts_rank(ocr."textSearch", to_tsquery('english', ${tsQuery})) AS rank
-    FROM "OcrRecord" ocr
-    JOIN "Image" i ON i.id = ocr."imageId"
+      ocr.raw_text AS "rawText",
+      ts_rank(ocr.text_search, to_tsquery('english', ${tsQuery})) AS rank
+    FROM ocr_records ocr
+    JOIN images i ON i.id = ocr.image_id
     WHERE
-      i."userId" = ${userId}
-      AND ocr."textSearch" @@ to_tsquery('english', ${tsQuery})
-      ${query.cursor ? prisma.$queryRaw`AND i.id > ${query.cursor}` : prisma.$queryRaw``}
-    ORDER BY rank DESC, i."createdAt" DESC
+      i.user_id = ${userId}
+      AND i.deleted_at IS NULL
+      AND ocr.text_search @@ to_tsquery('english', ${tsQuery})
+    ORDER BY rank DESC, i.created_at DESC
     LIMIT ${limit + 1}
+    OFFSET ${offset}
   `;
 
   const hasNextPage = rawResults.length > limit;
@@ -340,7 +394,7 @@ export async function searchImagesByOcr(userId, query) {
   if (trimmed.length === 0) {
     return {
       images: [],
-      pagination: { nextCursor: null, hasNextPage: false, count: 0 },
+      pagination: { nextOffset: null, hasNextPage: false, count: 0 },
     };
   }
 
@@ -355,7 +409,7 @@ export async function searchImagesByOcr(userId, query) {
   return {
     images: orderedImages,
     pagination: {
-      nextCursor: hasNextPage ? trimmed[trimmed.length - 1].id : null,
+      nextOffset: hasNextPage ? offset + limit : null,
       hasNextPage,
       count: orderedImages.length,
     },

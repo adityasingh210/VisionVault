@@ -7,10 +7,10 @@ import type {
   Image,
   PhotoEvent,
   PhotoEventDetail,
-  MemoryHighlight,
+  MemoriesOverview,
   MemoryPerson,
   MemoryEvent,
-  MemoryDocument,
+  DocumentsOverview,
   MemoryMonthly,
   MemoryTravel,
 } from '@/types'
@@ -23,14 +23,24 @@ export const searchApi = {
 }
 
 export const facesApi = {
+  // Confirmed shape: { clusters: [{ id, label, faceCount, representativeImage, createdAt }] }
   getClusters: async (): Promise<FaceCluster[]> => {
     const { data } = await api.get<{ clusters: FaceCluster[] }>('/faces/clusters')
     return data.clusters
   },
 
   getCluster: async (id: string): Promise<FaceClusterDetail> => {
-    const { data } = await api.get<{ cluster: FaceClusterDetail }>(`/faces/clusters/${id}`)
-    return data.cluster
+    // Backend returns the cluster object directly — { id, label, createdAt, faces }
+    // — not wrapped in { cluster: ... }. `faces` is an array of face-detection
+    // records (bbox + nested `image`), not photos directly, so pull the image
+    // out of each face for the photo grid.
+    const { data } = await api.get<{
+      id: string
+      label?: string | null
+      createdAt?: string
+      faces: { id: string; image: Image }[]
+    }>(`/faces/clusters/${id}`)
+    return { id: data.id, label: data.label, images: data.faces.map((f) => f.image) }
   },
 }
 
@@ -61,34 +71,45 @@ export const eventsApi = {
   },
 }
 
+// /memories/people, /events, /monthly, /travel wrap their payload as
+// { data: [...], total? } — but that isn't guaranteed to always be an array
+// (highlights/documents already turned out not to be), so keep this guard
+// for these too.
+function toArray<T>(value: T[] | T | null | undefined): T[] {
+  if (!value) return []
+  return Array.isArray(value) ? value : [value]
+}
+
 export const memoriesApi = {
-  getHighlights: async (): Promise<MemoryHighlight[]> => {
-    const { data } = await api.get<{ highlights: MemoryHighlight[] }>('/memories/highlights')
-    return data.highlights
+  // Single dashboard-style stats object, not an array — see MemoriesOverview.
+  getHighlights: async (): Promise<MemoriesOverview> => {
+    const { data } = await api.get<{ data: MemoriesOverview }>('/memories/highlights')
+    return data.data
   },
 
   getPeople: async (): Promise<MemoryPerson[]> => {
-    const { data } = await api.get<{ people: MemoryPerson[] }>('/memories/people')
-    return data.people
+    const { data } = await api.get<{ data: MemoryPerson[] | MemoryPerson }>('/memories/people')
+    return toArray(data.data)
   },
 
   getEvents: async (): Promise<MemoryEvent[]> => {
-    const { data } = await api.get<{ events: MemoryEvent[] }>('/memories/events')
-    return data.events
+    const { data } = await api.get<{ data: MemoryEvent[] | MemoryEvent }>('/memories/events')
+    return toArray(data.data)
   },
 
-  getDocuments: async (): Promise<MemoryDocument[]> => {
-    const { data } = await api.get<{ documents: MemoryDocument[] }>('/memories/documents')
-    return data.documents
+  // Grouped by document type, not a flat array — see DocumentsOverview.
+  getDocuments: async (): Promise<DocumentsOverview> => {
+    const { data } = await api.get<{ data: DocumentsOverview }>('/memories/documents')
+    return data.data
   },
 
   getMonthly: async (): Promise<MemoryMonthly[]> => {
-    const { data } = await api.get<{ months: MemoryMonthly[] }>('/memories/monthly')
-    return data.months
+    const { data } = await api.get<{ data: MemoryMonthly[] | MemoryMonthly }>('/memories/monthly')
+    return toArray(data.data)
   },
 
   getTravel: async (): Promise<MemoryTravel[]> => {
-    const { data } = await api.get<{ travel: MemoryTravel[] }>('/memories/travel')
-    return data.travel
+    const { data } = await api.get<{ data: MemoryTravel[] | MemoryTravel }>('/memories/travel')
+    return toArray(data.data)
   },
 }

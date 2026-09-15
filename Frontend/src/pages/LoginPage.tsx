@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input'
 import { useLogin } from '@/hooks/useApi'
 import { useAuthStore } from '@/store/authStore'
 import { cn } from '@/lib/utils'
+import { getApiErrorMessage } from '@/api/client'
 
 export default function LoginPage() {
   const navigate = useNavigate()
@@ -30,14 +31,11 @@ export default function LoginPage() {
     }
 
     try {
-     const res = await login.mutateAsync({ email, password })
-    console.log("LOGIN RESPONSE", res)
-   storeLogin(res.user, res.tokens.accessToken)
+      const res = await login.mutateAsync({ email, password })
+      storeLogin(res.user, res.tokens.accessToken)
       navigate(from, { replace: true })
     } catch (err: unknown) {
-      const message =
-        err instanceof Error ? err.message : 'Invalid email or password. Please try again.'
-      setError(message)
+      setError(getApiErrorMessage(err))
     }
   }
 

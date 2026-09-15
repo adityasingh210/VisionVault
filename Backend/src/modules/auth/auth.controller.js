@@ -1,5 +1,5 @@
 import * as authService from "./auth.service.js";
-import { verifyRefreshToken } from "../../lib/jwt.js";
+import { verifyRefreshToken, getRefreshTokenTtlSeconds } from "../../lib/jwt.js";
 import { AuthenticationError } from "../../lib/errors.js";
 import { env } from "../../config/env.js";
 
@@ -9,7 +9,7 @@ const refreshCookieOptions = {
   httpOnly: true,
   secure: env.NODE_ENV === "production",
   sameSite: "strict",
-  maxAge: 7 * 24 * 60 * 60 * 1000,
+  maxAge: getRefreshTokenTtlSeconds() * 1000,
   path: "/api/auth",
 };
 

@@ -5,26 +5,49 @@ import logger from "../lib/logger.js";
 let redis;
 
 function createRedisClient() {
-  const client = new Redis(env.REDIS_URL, {
-    maxRetriesPerRequest: null, 
-    enableReadyCheck: true,
-    lazyConnect: true,
+  const client = new Redis({
+  host: env.REDIS_HOST,
+  port: env.REDIS_PORT,
+  username: env.REDIS_USERNAME,
+  password: env.REDIS_PASSWORD,
+  maxRetriesPerRequest: null,
+});
+
+  client.on("connect", () => {
+    logger.info("Redis connected");
   });
 
-  client.on("connect", () => logger.info("Redis connected"));
-  client.on("ready", () => logger.debug("Redis ready"));
-  client.on("error", (err) => logger.error("Redis error", { error: err.message }));
-  client.on("close", () => logger.warn("Redis connection closed"));
-  client.on("reconnecting", (ms) =>
-    logger.warn("Redis reconnecting", { delay: `${ms}ms` })
-  );
+  client.on("ready", () => {
+    logger.debug("Redis ready");
+  });
+  
+client.on("error", (err) => {
+  console.error("REDIS ACTUAL ERROR:", err);
+});
+
+  client.on("close", () => {
+    logger.warn("Redis connection closed");
+  });
+
+  client.on("reconnecting", (delay) => {
+    logger.warn("Redis reconnecting", {
+      delay: `${delay}ms`,
+    });
+  });
 
   return client;
 }
 
 export async function connectRedis() {
   redis = createRedisClient();
-  await redis.connect();
+
+  try {
+    await redis.ping();
+    logger.info("Redis connection verified");
+  } catch (error) {
+    console.error("REDIS CONNECTION FAILED:", error);
+    throw error;
+  }
 }
 
 export async function disconnectRedis() {
@@ -40,7 +63,12 @@ export function getRedis() {
       "Redis client is not initialized. Call connectRedis() first."
     );
   }
+
   return redis;
 }
 
-export default { getRedis, connectRedis, disconnectRedis };
+export default {
+  getRedis,
+  connectRedis,
+  disconnectRedis,
+};

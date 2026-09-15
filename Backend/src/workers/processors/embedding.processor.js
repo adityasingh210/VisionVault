@@ -97,20 +97,35 @@ if (!image) {
     );
     throw err;
   }
-  const topCategory = image.imageCategories[0]?.category?.slug ?? "other";
+  // Re-fetch the category right before upserting rather than trusting the
+  // value read at job start: CLIP inference above can take a while, and the
+  // CATEGORY job (which writes the real category) runs concurrently off the
+  // same hash job. Reading it again here, as late as possible, closes most of
+  // the race window between the two jobs (see M4 in the audit).
+  let topCategory = image.imageCategories[0]?.category?.slug ?? "other";
+  try {
+    const latest = await prisma.imageCategory.findFirst({
+      where: { imageId },
+      orderBy: { confidence: "desc" },
+      select: { category: { select: { slug: true } } },
+    });
+    if (latest?.category?.slug) topCategory = latest.category.slug;
+  } catch (err) {
+    logger.warn("Could not refresh category before embedding upsert", {
+      imageId,
+      error: err.message,
+    });
+  }
   const takenAtValue = image.takenAt
   ? image.takenAt.toISOString()
   : null;
 
   try {
-    function uuidToInt(uuid) {
-  return parseInt(uuid.replace(/-/g, '').slice(0, 15), 16);
-}
     await qdrantClient.upsert(COLLECTIONS.IMAGE_EMBEDDINGS, {
       wait: true,
       points: [
         {
-          id: uuidToInt(imageId), 
+          id: imageId, // Qdrant accepts UUID strings natively as point IDs — no lossy int conversion needed
           vector: embedding,
           payload: {
             image_id: imageId, 

@@ -1,4 +1,4 @@
-import { build } from '/home/claude/frontend_project/Frontend/node_modules/esbuild/lib/main.js'
+import { build } from 'esbuild'
 import path from 'path'
 import { fileURLToPath } from 'url'
 import fs from 'fs'

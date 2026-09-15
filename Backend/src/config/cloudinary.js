@@ -9,10 +9,7 @@ cloudinary.config({
   secure: true,
 });
 
-/**
- * Pings the Cloudinary API to confirm credentials are valid.
- * Called during server startup before accepting traffic.
- */
+
 export async function verifyCloudinaryConnection() {
   const result = await cloudinary.api.ping();
 

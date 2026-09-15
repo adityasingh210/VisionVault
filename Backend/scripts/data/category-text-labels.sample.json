@@ -1,0 +1,20 @@
+[
+  { "query": "dogs", "expectedSlug": "dogs" },
+  { "query": "dog", "expectedSlug": "dogs" },
+  { "query": "puppy", "expectedSlug": "dogs" },
+  { "query": "cats", "expectedSlug": "cats" },
+  { "query": "cat", "expectedSlug": "cats" },
+  { "query": "kitten", "expectedSlug": "cats" },
+  { "query": "birds", "expectedSlug": "birds" },
+  { "query": "my passport", "expectedSlug": "documents" },
+  { "query": "invoice", "expectedSlug": "documents" },
+  { "query": "birthday cake", "expectedSlug": "food" },
+  { "query": "sushi dinner", "expectedSlug": "food" },
+  { "query": "beach vacation", "expectedSlug": "travel" },
+  { "query": "mountains", "expectedSlug": "travel" },
+  { "query": "selfie", "expectedSlug": "selfie" },
+  { "query": "screenshot of app", "expectedSlug": "screenshots" },
+  { "query": "my car", "expectedSlug": "vehicles" },
+  { "query": "office building", "expectedSlug": "buildings" },
+  { "query": "flowers in the garden", "expectedSlug": "nature" }
+]

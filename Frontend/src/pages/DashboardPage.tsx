@@ -167,13 +167,13 @@ export default function DashboardPage() {
   const { user } = useAuthStore()
   const { setCommandOpen } = useUIStore()
 
-  const { data: imagesData, isLoading: imagesLoading } = useImages({ page: 1, pageSize: 12 })
+  const { data: imagesData, isLoading: imagesLoading } = useImages({ limit: 12 })
   const { data: categories, isLoading: catsLoading } = useCategories()
   const { data: clusters, isLoading: clustersLoading } = useFaceClusters()
   const { data: events, isLoading: eventsLoading } = useEvents()
 
-  const totalPhotos = imagesData?.total ?? 0
-  const recentPhotos = imagesData?.items?.slice(0, 8) ?? []
+  const totalPhotos = imagesData?.pagination.count ?? 0
+  const recentPhotos = imagesData?.images?.slice(0, 8) ?? []
   const firstName = user?.name?.split(' ')[0] || user?.email?.split('@')[0] || 'there'
 
   const now = new Date()
@@ -188,7 +188,7 @@ export default function DashboardPage() {
       <div className="relative rounded-2xl overflow-hidden border border-border bg-gradient-to-br from-primary/10 via-card to-card p-6 lg:p-8">
         {/* Decorative blobs */}
         <div className="absolute top-0 right-0 w-64 h-64 rounded-full bg-primary/5 blur-3xl pointer-events-none" />
-        <div className="absolute bottom-0 left-1/2 w-48 h-48 rounded-full bg-violet-500/5 blur-3xl pointer-events-none" />
+        <div className="absolute bottom-0 left-1/2 w-48 h-48 rounded-full bg-gold-500/5 blur-3xl pointer-events-none" />
 
         <div className="relative flex flex-col sm:flex-row sm:items-center justify-between gap-6">
           <div>
@@ -241,7 +241,7 @@ export default function DashboardPage() {
           value={catsLoading ? '—' : (categories?.length ?? 0)}
           sub="AI-detected scenes"
           loading={catsLoading}
-          color="text-violet-400"
+          color="text-gold-400"
           onClick={() => navigate('/categories')}
         />
         <StatCard
@@ -344,8 +344,8 @@ export default function DashboardPage() {
                 icon={<Search size={16} />}
                 label="Semantic search"
                 description="Search by what's in the photo"
-                color="text-violet-400"
-                bgColor="bg-violet-500/10"
+                color="text-gold-400"
+                bgColor="bg-gold-500/10"
                 badge="AI"
                 onClick={() => setCommandOpen(true)}
               />

@@ -32,6 +32,6 @@ export const getImageStatusSchema = z.object({
 
 export const ocrSearchSchema = z.object({
   q: z.string().trim().min(1, "Search query cannot be empty").max(500),
-  cursor: z.string().uuid().optional(),
+  offset: z.coerce.number().int().min(0).optional(),
   limit: z.coerce.number().int().min(1).max(100).optional(),
 });
